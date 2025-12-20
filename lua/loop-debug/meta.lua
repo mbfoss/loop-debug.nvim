@@ -1,0 +1,28 @@
+--- @meta
+
+assert(false, "should not require() meta file")
+
+---@class loopdebug.Task : loop.Task
+---@field debugger string
+---@field request "launch"|"attach"
+---@field command string|string[]|nil
+---@field stopOnEntry boolean|nil
+---@field runInTerminal boolean|nil
+---@field terminateOnDisconnect boolean|nil
+---@field pid number|string|nil
+---@field program string|nil
+---@field args string[]|nil
+---@field cwd string|nil
+---@field host string|nil
+---@field port number|string|nil
+---@field sourceMaps any
+---@field address string|nil
+---@field restart boolean|nil
+---@field remoteRoot string|nil
+---@field justMyCode boolean|nil
+---@field mode string|nil
+---@field processId number|string|nil
+---@field userDataDir boolean|nil
+---@field url string|nil
+---@field pathMappings string|table|nil
+---@field hostName string|nil

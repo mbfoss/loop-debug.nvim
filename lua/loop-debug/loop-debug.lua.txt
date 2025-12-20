@@ -1,0 +1,179 @@
+local M = {}
+
+local debugui = require("loop.debug.debugui")
+local dapbreakpoints = require('loopdebug.breakpoints')
+local uibreakpoints = require('loop.debug.bpts_ui')
+
+
+---@class loop.Task.DebugConfig
+---@field type string
+---@field request "launch"|"attach"
+---@field stopOnEntry boolean|nil
+---@field runInTerminal boolean|nil
+---@field terminateOnDisconnect boolean|nil
+---@field pid number|string|nil
+---@field program string|nil
+---@field args string[]|nil
+---@field cwd string|nil
+---@field host string|nil
+---@field port number|string|nil
+---@field sourceMaps any
+---@field address string|nil
+---@field restart boolean|nil
+---@field remoteRoot string|nil
+---@field justMyCode boolean|nil
+---@field mode string|nil
+---@field processId number|string|nil
+---@field userDataDir boolean|nil
+---@field url string|nil
+---@field pathMappings string|table|nil
+---@field hostName string|nil
+
+
+---@class loop.Config.Debug
+---@field stack_levels_limit number
+---@field sign_priority table<string,number>
+
+---@field debug loop.Config.Debug
+
+-----------------------------------------------------------
+-- Defaults
+-----------------------------------------------------------
+
+---@type loop.Config
+local DEFAULT_CONFIG = {
+    selector = "builtin",
+    window = {
+        symbols = {
+            change  = "●",
+            success = "✓",
+            failure = "✗",
+            running = "▶",
+            paused  = "⏸",
+            cycle   = "↻",
+        },
+    },
+    debug = {
+        stack_levels_limit = 100,
+        auto_switch_page = true,
+        sign_priority = {
+            breakpoints = 12,
+            currentframe = 13,
+        },
+    },
+    qfmatchers = require("loop.task.qfmatchers"),
+    macros = require("loop.task.macros"),
+    debuggers = require("loop.task.debuggers"),
+}
+
+
+---@param command loop.job.DebugJob.Command|nil
+function M.debug_command(command)
+    debugui.debug_command(command)
+end
+
+function M.toggle_debug_mode()
+    debugui.toggle_debug_mode()
+end
+
+local function _on_project_save()
+        dapbreakpoints.save_breakpoints(config_dir)
+end
+
+local function _on_project_close()
+    local have_breakpoints = dapbreakpoints.have_breakpoints()
+    if have_breakpoints then
+        dapbreakpoints.clear_all_breakpoints()
+    end
+end
+
+local function _on_project_load()
+    dapbreakpoints.load_breakpoints(config_dir)
+
+end
+
+
+---@param args string[]
+---@return string[]
+function M.breakpoints_subcommands(args)
+    if #args == 0 then
+        return { "list", "toggle", "logpoint", "clear_file", "clear_all" }
+    end
+    return {}
+end
+
+function M.init()
+    if initialized then
+        return
+    end
+    initialized = true
+
+    -- Apply defaults if setup() was never called
+    if not setup_done then
+        config.current = DEFAULT_CONFIG
+    end
+
+        require('loop.debug.signs').setup()
+    require('loop.debug.bpts_ui').setup()
+
+
+    project.setup()
+
+    _G.LoopProject = {
+        _winbar_click = project.winbar_click,
+        project = project.show_proj_path,
+        create_project = project.create_project,
+        open_project = project.open_project,
+        project_info = project.show_proj_info,
+        save_project_files = project.save_project_files,
+        toggle = project.toggle_window,
+        show = project.show_window,
+        hide = project.hide_window,
+        page = project.switch_page,
+        open_page = project.open_page,
+
+        task = project.task_command,
+        debug_mode = project.toggle_debug_mode,
+        debug = project.debug_command,
+        breakpoint = project.breakpoints_command,
+    }
+
+    vim.keymap.set("n", "<leader>lr", ":Loop toggle<CR>", { desc = "Run task", silent = true })
+    vim.keymap.set("n", "<leader>lp", ":Loop page<CR>", { desc = "Switch main page", silent = true })
+    vim.keymap.set("n", "<leader>lP", ":Loop open_page<CR>", { desc = "Open page", silent = true })
+    vim.keymap.set("n", "<leader>lr", ":Loop task<CR>", { desc = "Run task", silent = true })
+    vim.keymap.set("n", "<leader>lR", ":Loop task repeat<CR>", { desc = "Repeat task", silent = true })
+    vim.keymap.set("n", "<leader>db", ":Loop breakpoint<CR>", { desc = "Toggle breakpoint", silent = true })
+    vim.keymap.set("n", "<leader>dB", ":Loop breakpoint list<CR>", { desc = "List breakpoints", silent = true })
+    vim.keymap.set("n", "<leader>dm", ":Loop debug_mode<CR>", { desc = "Toggle debug mode", silent = true })
+    vim.keymap.set("n", "<leader>ds", ":Loop debug session<CR>", { desc = "Select debug session", silent = true })
+    vim.keymap.set("n", "<leader>dt", ":Loop debug thread<CR>", { desc = "Select thread", silent = true })
+    vim.keymap.set("n", "<leader>dc", ":Loop debug continue<CR>", { desc = "Continue paused session", silent = true })
+    vim.keymap.set("n", "<leader>dC", ":Loop debug continue_all<CR>", { desc = "Continue all paused sesions", silent = true })
+    vim.keymap.set("n", "<leader>dK", ":Loop debug terminate_all<CR>", { desc = "Terminal all debug sessions", silent = true })
+end
+
+
+
+
+---@param args string[]
+---@return string[]
+function M.debug_subcommands(args)
+    if #args == 0 then
+        return { "session", "thread", "continue", "step_in", "step_out", "step_over", "step_back", "terminate",
+            "continue_all", "terminate_all" }
+    end
+    return {}
+end
+
+
+---@param config_dir string
+function M.add_debug_task(config_dir)
+    local templates = require('loop.task.debugtemplates')
+    _select_and_add_task(config_dir, templates, "Choose a task template")
+end
+
+        elseif cmd == "breakpoint" then
+            return filter(project.breakpoints_subcommands(rest))
+
+return M

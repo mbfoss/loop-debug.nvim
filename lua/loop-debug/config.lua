@@ -1,0 +1,12 @@
+---@class loop-debug.Config
+---@field default_keymaps? boolean
+---@field stack_levels_limit? number
+---@field sign_priority? table<string,number>
+---@field debuggers table<string,loopdebug.Config.Debugger>
+
+local M = {}
+
+---@type loop-debug.Config|nil
+M.current = nil
+
+return M
