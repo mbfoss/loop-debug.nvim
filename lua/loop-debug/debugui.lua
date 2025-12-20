@@ -1,12 +1,12 @@
 local config         = require("loop-debug.config")
-local signs          = require('loop-debug.ui.signs')
-local debugmode      = require('loop-debug.ui.debugmode')
+local signs          = require('loop-debug.signs')
+local debugmode      = require('loop-debug.debugmode')
 local filetools      = require('loop.tools.file')
 local OutputPage     = require('loop.pages.OutputPage')
 local ItemListPage   = require('loop.pages.ItemListPage')
-local VariablesPage  = require('loop-debug.ui.VariablesPage')
-local VarWatchPage   = require('loop-debug.ui.VarWatchPage')
-local StackTracePage = require('loop-debug.ui.StackTracePage')
+local VariablesPage  = require('loop-debug.pages.VariablesPage')
+local VarWatchPage   = require('loop-debug.pages.VarWatchPage')
+local StackTracePage = require('loop-debug.pages.StackTracePage')
 local uitools        = require('loop.tools.uitools')
 local notifications  = require('loop.notifications')
 local selector       = require('loop.tools.selector')
@@ -382,8 +382,8 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
             local label = is_debuggee and "Debug Output" or "Debugger"
             pagegroup = jobdata.page_manager.add_page_group(group_id, label)
         end
+        local base_page = pagegroup.add_page(tostring(sess_id), sess_name)
         page = OutputPage:new(sess_name)
-        pagegroup.add_page(tostring(sess_id), page)
     end
 
     if page then

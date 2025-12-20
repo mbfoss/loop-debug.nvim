@@ -1,6 +1,6 @@
-local class    = require('loop-debug.tools.class')
+local class    = require('loop.tools.class')
 local Session  = require('loop-debug.dap.Session')
-local Trackers = require("loop-debug.tools.Trackers")
+local Trackers = require("loop.tools.Trackers")
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -37,12 +37,12 @@ local Trackers = require("loop-debug.tools.Trackers")
 ---@field _sessions table<number,loopdebug.Session>
 ---@field _last_session_id number
 ---@field _trackers loop.tools.Trackers<loop.job.debugjob.Tracker>
-local DebugJob = class(Job)
+local DebugJob = class()
 
 ---Initializes the DebugJob instance.
 ---@param name string
 function DebugJob:init(name)
-    self._log = require('loop.tools.Logger').create_logger("DebugJob[" .. tostring(name) .. "]")
+    self._log = require('loop-debug.tools.Logger').create_logger("DebugJob[" .. tostring(name) .. "]")
     ---@type table<number,loopdebug.Session>
     self._sessions = {}
     self._last_session_id = 0
@@ -68,9 +68,9 @@ function DebugJob:is_running()
     return next(self._sessions) ~= nil
 end
 
-function DebugJob:kill()
+function DebugJob:terminate()
     for _, s in pairs(self._sessions) do
-        s:kill()
+        s:terminate()
     end
 end
 

@@ -20,3 +20,5 @@ local run = require('loop-debug.run')
         end,
         start_one_task = run.start_debug_task
     }
+
+    return task_provider

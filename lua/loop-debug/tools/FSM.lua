@@ -21,7 +21,7 @@ local FSM = class()
 ---@param name string: Name used for logging.
 ---@param fsmdata loop.tools.FSMData: Configuration object containing initial state and state table.
 function FSM:init(name, fsmdata)
-    self._log = require('loop.tools.Logger').create_logger("fsm." .. name)
+    self._log = require('loop-debug.tools.Logger').create_logger("fsm." .. name)
     self.states = fsmdata.states or {}
     self._current = fsmdata.initial
     self._started = false

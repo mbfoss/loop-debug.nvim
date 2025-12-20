@@ -11,7 +11,7 @@ local env_log_level = vim.env.NVIM_LOOP_PLUGIN_LOG_LEVEL
 local log_level = env_log_level and tonumber(env_log_level) or vim.log.levels.OFF
 
 -- Log file path
-local log_file_path = vim.fs.joinpath(vim.fn.stdpath("log"), "loopdebug.nvim.log")
+local log_file_path = vim.fs.joinpath(vim.fn.stdpath("log"), "loop-debug.log")
 
 ------------------------------------------------------------
 -- INTERNALS

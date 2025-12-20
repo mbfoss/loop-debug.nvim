@@ -3,7 +3,7 @@ local strtools = require('loop.tools.strtools')
 local daptools = require("loop-debug.dap.daptools")
 
 local BaseSession = require("loop-debug.dap.BaseSession")
-local FSM = require("loop.tools.FSM")
+local FSM = require("loop-debug.tools.FSM")
 
 local fsmdata = require('loop-debug.dap.fsmdata')
 local breakpoints = require('loop-debug.dap.breakpoints')
@@ -29,7 +29,7 @@ function Session:init(name)
     assert(name, "session name require")
 
     self._name = name
-    self._log = require('loop.tools.Logger').create_logger("dap.session[" .. tostring(name) .. "]")
+    self._log = require('loop-debug.tools.Logger').create_logger("dap.session[" .. tostring(name) .. "]")
 
     self._started = false
     self._subsession_id = 0
@@ -165,7 +165,7 @@ function Session:start(args)
     return true
 end
 
-function Session:kill()
+function Session:terminate()
     self._fsm:trigger(fsmdata.trigger.disconnect)
 end
 
@@ -731,7 +731,7 @@ function Session:_on_ended_state()
     self._can_send_breakpoints = false
     self:stop_tracking_breakpoints()
     self:_notify_about_state()
-    self._base_session:kill()
+    self._base_session:terminate()
 end
 
 return Session

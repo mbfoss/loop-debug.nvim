@@ -16,7 +16,7 @@ function Tcp:init(name, opts)
     assert(type(opts.host) == "string" and opts.host ~= "", "host required")
     assert(type(opts.port) == "number" and opts.port > 0 and opts.port < 65536, "valid port required")
 
-    self.log = require('loop.tools.Logger').create_logger("dap.tcp[" .. name .. "]")
+    self.log = require('loop-debug.tools.Logger').create_logger("dap.tcp[" .. name .. "]")
     self.name = name
     self.host = opts.host
     self.port = opts.port
@@ -166,7 +166,7 @@ function Tcp:running()
     return self.socket and not self.socket:is_closing() and not self.exited
 end
 
-function Tcp:kill(_)
+function Tcp:terminate(_)
     self:close()
 end
 

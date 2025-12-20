@@ -213,7 +213,7 @@ debuggers["js-debug"] = {
             context.user_data.exit_handler = function()
                 callabck()
             end
-            proc:kill()
+            proc:terminate()
         else
             callabck()
         end

@@ -1,15 +1,17 @@
 local M = {}
 
+local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
-local debugui = require('loop-debug.ui.debugui')
-local bpts_ui = require('loop-debug.ui.bpts_ui')
+local debugui = require('loop-debug.debugui')
+local bpts_ui = require('loop-debug.bpts_ui')
+local projinfo = require('loop.projinfo')
+local fntools = require('loop.tools.fntools')
 
 ---@param args loop.DebugJob.StartArgs
 ---@param page_manager loop.PageManager
 ---@param startup_callback fun(job: loop.job.DebugJob|nil, err: string|nil)
----@param output_handler fun(stream: "stdout"|"stderr", data: string[])|nil
 ---@param exit_handler fun(code: number)
-local function _start_debug_job(args, page_manager, startup_callback, output_handler, exit_handler)
+local function _start_debug_job(args, page_manager, startup_callback, exit_handler)
     -- Final DAP type validation
     if args.debug_args.adapter.type ~= "executable" and args.debug_args.adapter.type ~= "server" then
         return startup_callback(nil,
@@ -26,11 +28,6 @@ local function _start_debug_job(args, page_manager, startup_callback, output_han
     job:add_tracker(bpts_ui.track_new_debugjob(args.name))
     job:add_tracker({ on_exit = exit_handler })
 
-    if output_handler then
-        job:add_tracker({ on_stdout = function(data) output_handler("stdout", data) end })
-        job:add_tracker({ on_stderr = function(data) output_handler("stderr", data) end })
-    end
-
     -- Start the debug job
     local ok, err = job:start(args)
     if not ok then
@@ -44,10 +41,12 @@ end
 
 ---@type fun(task:loopdebug.Task,page_manager:loop.PageManager, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
 function M.start_debug_task(task, page_manager, on_exit)
-
     -- Early validation
     if not task or type(task) ~= "table" then
         return nil, "task is required and must be a table"
+    end
+    if not task.name or type(task.name) ~= "string" or #task.name == 0 then
+        return nil, "task.name must be a non-empty string"
     end
     if task.type ~= "debug" then
         return nil, "task.type must be 'debug'"
@@ -57,31 +56,40 @@ function M.start_debug_task(task, page_manager, on_exit)
     end
 
     ---@type loopdebug.Config.Debugger
-    local debugger = config.current.debuggers[task.type]
+    local debugger = config.current.debuggers[task.debugger]
     if not debugger then
-        return nil, "no debugger config found for '%s'"):format(tostring(debugger)
+        return nil, ("no debugger config found for task.debugger '%s'"):format(tostring(task.debugger))
+    end
+
+    local proj_dir = projinfo.get_proj_dir()
+    if not proj_dir then
+        return nil, "failed to read project dir"
     end
 
     ---- debug adapter config ---
     ---@type loopdebug.AdapterConfig
     local adapter_config
     if type(debugger.adapter_config) == "function" then
-        ---@type loop.TaskContext
+        ---@type loopdebug.TaskContext
         local task_context = {
             task = task,
-            proj_dir = projinfo.get_proj_dir()
+            proj_dir = proj_dir
         }
         ---@type loopdebug.AdapterConfig
         adapter_config = debugger.adapter_config(task_context)
+        if type(adapter_config) ~= "table" then
+            return nil, "debugger.adapter_config function must return a table"
+        end
     else
+        -- deep copy because a badly coded hook may change the config
         ---@type loopdebug.AdapterConfig
         ---@diagnostic disable-next-line: assign-type-mismatch, param-type-mismatch
         adapter_config = vim.deepcopy(debugger.adapter_config)
     end
 
-    adapter_config.cwd = adapter_config.cwd or projinfo.get_proj_dir()
+    adapter_config.cwd = adapter_config.cwd or proj_dir
     if not adapter_config.cwd then
-        return startup_callback(nil, "'cwd' is missing in task config")
+        return nil, "'cwd' is missing in task config"
     end
 
     -- request config
@@ -93,13 +101,17 @@ function M.start_debug_task(task, page_manager, on_exit)
     end
 
     if type(request_args) == "function" then
-        ---@type loop.TaskContext
+        ---@type loopdebug.TaskContext
         local task_context = {
             task = task,
-            proj_dir = projinfo.get_proj_dir()
+            proj_dir = proj_dir
         }
         request_args = request_args(task_context)
+        if type(request_args) ~= "table" then
+            return nil, "debugger.request_args function must return a table"
+        end
     else
+        -- deep copy because a badly coded hook may change the args
         request_args = vim.deepcopy(request_args)
     end
 
@@ -115,27 +127,51 @@ function M.start_debug_task(task, page_manager, on_exit)
         },
     }
 
-    ---@type loop.Config.Debugger.HookContext
+    ---@type loopdebug.Config.Debugger.HookContext
     local hook_context = {
         task = task,
-        proj_dir = projinfo.get_proj_dir(),
+        proj_dir = proj_dir,
         adapter_config = adapter_config,
         page_manager = page_manager,
         user_data = {}
     }
 
+    local task_control_context = {
+        job = nil,
+        disable_control = false,
+        termination_requested = false,
+    }
+
     local start_job = function()
-        local on_exit = function(code)
+        ---@type fun(job: loop.job.DebugJob|nil, err: string|nil)
+        local function on_job_start(job, err)
+            if not job then
+                task_control_context.disable_control = true
+                on_exit(false, err or "initialization error")
+            elseif task_control_context.termination_requested then
+                if job:is_running() then
+                    job:terminate()
+                else
+                    task_control_context.disable_control = true
+                    on_exit(false, "task terminated before startup completed")
+                end
+            else
+                task_control_context.job = job
+            end
+        end
+        local on_job_exit = function(code)
             if debugger.end_hook then
                 hook_context.exit_code = code
                 debugger.end_hook(hook_context, fntools.called_once(function()
-                    exit_handler(code)
+                    task_control_context.disable_control = true
+                    on_exit(code == 0, "Exit code: " .. tostring(code))
                 end))
             else
-                exit_handler(code)
+                task_control_context.disable_control = true
+                on_exit(code == 0, "Exit code: " .. tostring(code))
             end
         end
-        _start_debug_job(start_args, page_manager, startup_callback, output_handler, on_exit)
+        _start_debug_job(start_args, page_manager, on_job_start, on_job_exit)
     end
 
     if debugger.start_hook then
@@ -143,12 +179,27 @@ function M.start_debug_task(task, page_manager, on_exit)
             if ok then
                 start_job()
             else
-                startup_callback(nil, err or "start_hook error")
+                task_control_context.disable_control = true
+                on_exit(false, err or "start_hook error")
             end
         end))
     else
         start_job()
     end
+
+    ---@type loop.TaskControl
+    local task_control = {
+        terminate = function()
+            if task_control_context.disable_control then
+                return
+            end
+            task_control_context.termination_requested = true
+            if task_control_context.job then
+                task_control_context.job:terminate()
+            end
+        end
+    }
+    return task_control
 end
 
 return M

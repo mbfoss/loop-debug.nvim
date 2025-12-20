@@ -31,7 +31,7 @@ local msg_log_file = nil
 local function log_msg_content(line)
     if msg_log_enabled then
         if not msg_log_file then
-            local msg_log_file_path = vim.fs.joinpath(vim.fn.stdpath("log"), "loop.nvim.dap.log")
+            local msg_log_file_path = vim.fs.joinpath(vim.fn.stdpath("log"), "loop-debug.dap.log")
             msg_log_file = assert(io.open(msg_log_file_path, "w"))
         end
         msg_log_file:write(line)
@@ -61,8 +61,8 @@ function Channel:running()
     return self.transport:running()
 end
 
-function Channel:kill()
-    self.transport:kill()
+function Channel:terminate()
+    self.transport:terminate()
 end
 
 ---@param name string

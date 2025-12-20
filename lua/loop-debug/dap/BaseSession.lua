@@ -36,7 +36,7 @@ end
 function BaseSession:start(opts)
     assert(type(opts.on_stderr) == "function")
     assert(type(opts.on_exit) == "function")
-    self.log = require('loop.tools.Logger').create_logger("dap.basicsession[" .. self._name .. ']')
+    self.log = require('loop-debug.tools.Logger').create_logger("dap.basicsession[" .. self._name .. ']')
     self.request_seq = 0
     self.callbacks = {}
     self.event_handlers = {}
@@ -75,8 +75,8 @@ function BaseSession:running()
     return self.channel:running()
 end
 
-function BaseSession:kill()
-    self.channel:kill()
+function BaseSession:terminate()
+    self.channel:terminate()
 end
 
 ---@param event_name string

@@ -1,9 +1,8 @@
-require('loop.task.taskdef')
 ---@type loop.taskTemplate[]
 return {
--- ==================================================================
--- Lua
--- ==================================================================
+    -- ==================================================================
+    -- Lua
+    -- ==================================================================
     {
         name = "Debug current Lua file (local-lua-debugger-vscode)",
         task = {
@@ -11,10 +10,8 @@ return {
             type = "debug",
             command = "${file:lua}",
             cwd = "${projdir}",
-            debug = {
-                type = "lua",
-                request = "launch",
-            },
+            debugger = "lua",
+            request = "launch",
         }
     },
     {
@@ -22,17 +19,15 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "lua:remote",
-                request = "attach",
-                host = "127.0.0.1",
-                port = 8086,
-            },
+            debugger = "lua:remote",
+            request = "attach",
+            host = "127.0.0.1",
+            port = 8086,
         }
     },
--- ==================================================================
--- C / C++ / Rust / Objective-C (lldb-dap)
--- ==================================================================
+    -- ==================================================================
+    -- C / C++ / Rust / Objective-C (lldb-dap)
+    -- ==================================================================
     {
         name = "Debug executable with LLDB (launch)",
         task = {
@@ -40,12 +35,10 @@ return {
             type = "debug",
             command = "${prompt:Select binary: }",
             cwd = "${projdir}",
-            debug = {
-                type = "lldb",
-                request = "launch",
-                runInTerminal = true,
-                stopOnEntry = false,
-            },
+            debugger = "lldb",
+            request = "launch",
+            runInTerminal = true,
+            stopOnEntry = false,
         }
     },
     {
@@ -53,16 +46,14 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "lldb",
-                request = "attach",
-                pid = "${select-pid}",
-            },
+            debugger = "lldb",
+            request = "attach",
+            pid = "${select-pid}",
         }
     },
--- ==================================================================
--- Node.js / JavaScript / TypeScript
--- ==================================================================
+    -- ==================================================================
+    -- Node.js / JavaScript / TypeScript
+    -- ==================================================================
     {
         name = "Debug Node.js script (js-debug)",
         task = {
@@ -70,12 +61,10 @@ return {
             type = "debug",
             command = "${file:javascript}",
             cwd = "${projdir}",
-            debug = {
-                type = "js-debug",
-                request = "launch",
-                sourceMaps = true,
-                stopOnEntry = false,
-            },
+            debugger = "js-debug",
+            request = "launch",
+            sourceMaps = true,
+            stopOnEntry = false,
         }
     },
     {
@@ -83,18 +72,16 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "js-debug",
-                request = "attach",
-                address = "127.0.0.1",
-                port = "${prompt:Inspector port: }",
-                restart = true,
-            },
+            debugger = "js-debug",
+            request = "attach",
+            address = "127.0.0.1",
+            port = "${prompt:Inspector port: }",
+            restart = true,
         }
     },
--- ==================================================================
--- Python
--- ==================================================================
+    -- ==================================================================
+    -- Python
+    -- ==================================================================
     {
         name = "Debug Python script (debugpy)",
         task = {
@@ -102,11 +89,9 @@ return {
             type = "debug",
             command = "${file:python}",
             cwd = "${projdir}",
-            debug = {
-                type = "debugpy",
-                request = "launch",
-                justMyCode = false,
-            },
+            type = "debugpy",
+            request = "launch",
+            justMyCode = false,
         }
     },
     {
@@ -115,26 +100,24 @@ return {
             name = "Attach",
             type = "debug",
             debug = {
-                type = "debugpy:remote",
+                debugger = "debugpy:remote",
                 request = "attach",
                 justMyCode = false,
             },
         }
     },
--- ==================================================================
--- Go
--- ==================================================================
+    -- ==================================================================
+    -- Go
+    -- ==================================================================
     {
         name = "Debug Go program (delve)",
         task = {
             name = "Debug Go program (delve)",
             type = "debug",
             cwd = "${projdir}",
-            debug = {
-                type = "go",
-                request = "launch",
-                mode = "debug",
-            },
+            type = "go",
+            request = "launch",
+            mode = "debug",
         }
     },
     {
@@ -142,30 +125,26 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "go",
-                request = "attach",
-                mode = "local",
-                processId = "${select-pid}",
-            },
+            debugger = "go",
+            request = "attach",
+            mode = "local",
+            processId = "${select-pid}",
         }
     },
--- ==================================================================
--- Chrome / Web
--- ==================================================================
+    -- ==================================================================
+    -- Chrome / Web
+    -- ==================================================================
     {
         name = "Launch Chrome and debug",
         task = {
             name = "Launch",
             type = "debug",
-            debug = {
-                type = "chrome",
-                request = "launch",
-                url = "http://localhost:3000",
-                webRoot = "${projdir}",
-                userDataDir = false,
-                sourceMaps = true,
-            },
+            debugger = "chrome",
+            request = "launch",
+            url = "http://localhost:3000",
+            webRoot = "${projdir}",
+            userDataDir = false,
+            sourceMaps = true,
         }
     },
     {
@@ -173,17 +152,15 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "chrome",
-                request = "attach",
-                port = 9222,
-                webRoot = "${projdir}",
-            },
+            debugger = "chrome",
+            request = "attach",
+            port = 9222,
+            webRoot = "${projdir}",
         }
     },
--- ==================================================================
--- Bash
--- ==================================================================
+    -- ==================================================================
+    -- Bash
+    -- ==================================================================
     {
         name = "Debug Bash script (bashdb)",
         task = {
@@ -191,41 +168,35 @@ return {
             type = "debug",
             command = "${file}",
             cwd = "${projdir}",
-            debug = {
-                type = "bash",
-                request = "launch",
-            },
+            debugger = "bash",
+            request = "launch",
         }
     },
--- ==================================================================
--- PHP (Xdebug)
--- ==================================================================
+    -- ==================================================================
+    -- PHP (Xdebug)
+    -- ==================================================================
     {
         name = "Listen for Xdebug (PHP)",
         task = {
             name = "Listen",
             type = "debug",
-            debug = {
-                type = "php",
-                request = "launch",
-                port = 9003,
-                pathMappings = { ["/var/www/html"] = "${projdir}" },
-            },
+            debugger = "php",
+            request = "launch",
+            port = 9003,
+            pathMappings = { ["/var/www/html"] = "${projdir}" },
         }
     },
--- ==================================================================
--- C# / .NET
--- ==================================================================
+    -- ==================================================================
+    -- C# / .NET
+    -- ==================================================================
     {
         name = "Debug .NET DLL (netcoredbg)",
         task = {
             name = "Debug",
             type = "debug",
-            debug = {
-                type = "netcoredbg",
-                request = "launch",
-                program = ""
-            },
+            debugger = "netcoredbg",
+            request = "launch",
+            program = ""
         }
     },
     {
@@ -233,27 +204,23 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "netcoredbg",
-                request = "attach",
-                processId = "${select-pid}",
-            },
+            debugger = "netcoredbg",
+            request = "attach",
+            processId = "${select-pid}",
         }
     },
--- ==================================================================
--- Java (jdtls)
--- ==================================================================
+    -- ==================================================================
+    -- Java (jdtls)
+    -- ==================================================================
     {
         name = "Attach to Java process (JDWP)",
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                type = "java",
-                request = "attach",
-                hostName = "127.0.0.1",
-                port = 5005,
-            },
+            debugger = "java",
+            request = "attach",
+            hostName = "127.0.0.1",
+            port = 5005,
         }
     },
 }

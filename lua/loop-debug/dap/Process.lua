@@ -19,7 +19,7 @@ function Process:init(name, opts)
     assert(type(opts.cmd) == "string", "cmd is required")
     assert(opts.cwd, "cwd is required for dap process")
 
-    self.log = require('loop.tools.Logger').create_logger("dap.process[" .. name .. "]")
+    self.log = require('loop-debug.tools.Logger').create_logger("dap.process[" .. name .. "]")
     self.cmd = opts.cmd
     self.args = opts.args or {}
     self.cwd = opts.cwd
@@ -139,7 +139,7 @@ function Process:running()
     return self.handle ~= nil
 end
 
-function Process:kill(timeout)
+function Process:terminate(timeout)
     if self.exited or self.killed then return end
     self.killed = true
 

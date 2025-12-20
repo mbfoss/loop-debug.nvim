@@ -1,4 +1,4 @@
-local signs             = require('loop.debug.signs')
+local signs             = require('loop-debug.signs')
 local dapbreakpoints    = require('loop-debug.dap.breakpoints')
 local Trackers          = require('loop.tools.Trackers')
 local selector          = require("loop.tools.selector")

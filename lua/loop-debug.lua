@@ -3,7 +3,7 @@ local M = {}
 
 -- Dependencies
 local config = require("loop-debug.config")
-local debugui = require("loop-debug.ui.debugui")
+local debugui = require("loop-debug.debugui")
 local strtools = require("loop.tools.strtools")
 
 -----------------------------------------------------------
@@ -60,7 +60,7 @@ function M.init()
         config.current = DEFAULT_CONFIG
     end
 
-    require('loop-debug.ui.signs').init()
+    require('loop-debug.signs').init()
 
 
     if config.current.default_keymaps then
