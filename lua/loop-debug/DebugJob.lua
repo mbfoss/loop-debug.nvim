@@ -12,6 +12,7 @@ local Trackers = require("loop.tools.Trackers")
 ---|"terminate"
 ---|"continue_all"
 ---|"terminate_all"
+---|"debug_mode"
 
 ---@class loop.job.DebugJob.SessionController
 ---@field continue fun(thread_id: number, all_threads: boolean)
@@ -32,7 +33,7 @@ local Trackers = require("loop.tools.Trackers")
 ---@field on_thread_continue fun(sess_id:number, sess_name:string,data:loopdebug.session.notify.ThreadsEventScope)|nil
 ---@field on_breakpoint_event fun(sess_id:number, sess_name:string, event:loopdebug.session.notify.BreakpointsEvent)|nil
 
----@class loop.job.DebugJob 
+---@class loop.job.DebugJob
 ---@field new fun(self: loop.job.DebugJob, name:string) : loop.job.DebugJob
 ---@field _sessions table<number,loopdebug.Session>
 ---@field _last_session_id number
@@ -93,40 +94,37 @@ end
 ---@param parent_sess_id number|nil
 ---@return boolean,string|nil
 function DebugJob:add_new_session(name, debug_args, parent_sess_id)
-    local session_id      = self._last_session_id + 1
-    self._last_session_id = session_id
+    local session_id           = self._last_session_id + 1
+    self._last_session_id      = session_id
 
     ---@param session loopdebug.Session
     ---@param event loop.session.TrackerEvent
     ---@param event_data any
-    local tracker         = function(session, event, event_data)
+    local tracker              = function(session, event, event_data)
         self:_on_session_event(session_id, session, event, event_data)
     end
 
-    local exit_handler    = function(code)
-        self:_session_exit_handler(session_id, code)
+    local exit_handler         = function(code)
+        -- schedule so that it does not happen before on_sess_added event
+        vim.schedule(function()
+            self:_session_exit_handler(session_id, code)
+        end)
     end
 
-
     ---@type loopdebug.session.Args
-    local session_args = {
+    local session_args         = {
         debug_args = debug_args,
         tracker = tracker,
         exit_handler = exit_handler,
     }
 
     -- start new session
-    local session = Session:new(name)
-
-    local started, start_err = session:start(session_args)
-    if not started then
-        return false, "Failed to start debug session, " .. start_err
-    end
+    local session              = Session:new(name)
 
     self._sessions[session_id] = session
 
     ---@type loop.job.DebugJob.SessionController
-    local controller = {
+    local controller           = {
         continue = function(thread_id, all_threads) session:debug_continue(thread_id, all_threads) end,
         step_in = function(thread_id) session:debug_stepIn(thread_id) end,
         step_over = function(thread_id) session:debug_stepOver(thread_id) end,
@@ -135,8 +133,14 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
         terminate = function() session:debug_terminate() end,
     }
 
-    local data_providers = session:get_data_providers()
+    local data_providers       = session:get_data_providers()
+
     self._trackers:invoke("on_sess_added", session_id, name, parent_sess_id, controller, data_providers)
+
+    local started, start_err = session:start(session_args)
+    if not started then
+        return false, "Failed to start debug session, " .. start_err
+    end
 
     return true, nil
 end
@@ -145,9 +149,9 @@ function DebugJob:_session_exit_handler(session_id, code)
     vim.schedule(function()
         if self._sessions[session_id] then
             local session = self._sessions[session_id]
+            self:add_debug_output(session_id, session:name(), "log", "Debug session ended")
             self._trackers:invoke("on_sess_removed", session_id, session:name())
             self._sessions[session_id] = nil
-            self:add_debug_output(session_id, session:name(), "log", "Debug session ended")
             if next(self._sessions) == nil then
                 self._trackers:invoke("on_exit", code)
             end

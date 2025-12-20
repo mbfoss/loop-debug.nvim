@@ -2,6 +2,7 @@
 ---@field default_keymaps? boolean
 ---@field stack_levels_limit? number
 ---@field sign_priority? table<string,number>
+---@field symbols {running:string, paused:string}
 ---@field debuggers table<string,loopdebug.Config.Debugger>
 
 local M = {}

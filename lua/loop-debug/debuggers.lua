@@ -37,8 +37,8 @@ end
 
 ---@param context loopdebug.TaskContext
 local function _get_task_cwd(context)
-    local dbg = context.task.debug or {}
-    return dbg.cwd or context.task.cwd or context.proj_dir
+    local task = context.task
+    return task and task.cwd or context.proj_dir
 end
 
 ---@type table<string,loopdebug.Config.Debugger>
@@ -90,7 +90,7 @@ debuggers.lua = {
         },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "lua-local",
             request = "launch",
@@ -98,7 +98,7 @@ debuggers.lua = {
             cwd = _get_task_cwd(context),
             program = {
                 lua = vim.fn.exepath("lua"),
-                file = get_task_program(context.task),
+                file = get_task_program(task),
                 communication = 'stdio',
             },
         }
@@ -114,12 +114,12 @@ debuggers["lua:remote"] = {
         port = 0,
     },
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             request = "attach",
             type = "lua",
-            host = dbg.host or "127.0.0.1",
-            port = dbg.port or 8086,
+            host = task.host or "127.0.0.1",
+            port = task.port or 8086,
             cwd = _get_task_cwd(context),
             stopOnEntry = false,
         }
@@ -138,20 +138,20 @@ debuggers.lldb = {
         command = { mason_bin("lldb-dap") },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             program = get_task_program(context.task),
             args = get_task_args(context.task),
             cwd = _get_task_cwd(context),
-            stopOnEntry = dbg.stopOnEntry or false,
-            runInTerminal = dbg.runInTerminal ~= false,
+            stopOnEntry = task.stopOnEntry or false,
+            runInTerminal = task.runInTerminal ~= false,
         }
     end,
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
-            pid = dbg.pid,
-            program = get_task_program(context.task) or dbg.program,
+            pid = task.pid,
+            program = get_task_program(context.task) or task.program,
         }
     end,
 }
@@ -161,9 +161,10 @@ debuggers.lldb = {
 -- ==================================================================
 debuggers["js-debug"] = {
     start_hook = function(context, callabck)
+        local task = context.task
         local port
-        if context.task.debug and context.task.debug.port and type(context.task.debug.port) == "number" then
-            port = context.task.debug.port
+        if task and task.port and type(task.port) == "number" then
+            port = task.port
         else
             port = 0
         end
@@ -219,40 +220,41 @@ debuggers["js-debug"] = {
         end
     end,
     adapter_config = function(context)
+        local task = context.task
         ---@type loopdebug.AdapterConfig
         return {
             adapter_id = "js-debug",
             name = "js-debug",
             type = "server",
             host = "::1",
-            port = tonumber(context.task.debug.port),
+            port = tonumber(task.port),
             cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "pwa-node",
             request = "launch",
             runtimeExecutable = "node",
-            program = get_task_program(context.task) or dbg.program,
-            args = get_task_args(context.task) or dbg.args,
+            program = get_task_program(context.task) or task.program,
+            args = get_task_args(context.task) or task.args,
             cwd = _get_task_cwd(context),
-            stopOnEntry = dbg.stopOnEntry or false,
-            sourceMaps = dbg.sourceMaps ~= false,
+            stopOnEntry = task.stopOnEntry or false,
+            sourceMaps = task.sourceMaps ~= false,
         }
     end,
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "pwa-node",
             request = "attach",
-            address = dbg.address or "127.0.0.1",
-            port = dbg.port or 0,
+            address = task.address or "127.0.0.1",
+            port = task.port or 0,
             cwd = _get_task_cwd(context),
-            restart = dbg.restart ~= false,
-            localRoot = context.task.cwd or dbg.cwd,
-            remoteRoot = dbg.remoteRoot or "/app",
+            restart = task.restart ~= false,
+            localRoot = context.task.cwd or task.cwd,
+            remoteRoot = task.remoteRoot or "/app",
             skipFiles = { "<node_internals>/**", "node_modules/**" },
         }
     end,
@@ -269,15 +271,15 @@ debuggers.debugpy = {
         command = { "python3", "-m", "debugpy.adapter" },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             program = get_task_program(context.task),
             args = get_task_args(context.task),
             cwd = _get_task_cwd(context),
             stopOnEntry = false,
-            justMyCode = dbg.justMyCode ~= false,
+            justMyCode = task.justMyCode ~= false,
             console = "integratedTerminal",
-            env = context.task.env,
+            env = task.env,
         }
     end,
 }
@@ -291,9 +293,9 @@ debuggers["debugpy:remote"] = {
         port = 0,
     },
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
-            justMyCode = dbg.justMyCode ~= nil and dbg.justMyCode or false,
+            justMyCode = task.justMyCode ~= nil and task.justMyCode or false,
             console = "integratedTerminal",
         }
     end,
@@ -311,18 +313,18 @@ debuggers.go = {
         args = { "dap", "-l", "127.0.0.1:0" },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
-            mode = dbg.mode or "debug",
-            program = context.task.cwd or dbg.cwd,
+            mode = task.mode or "debug",
+            program = context.task.cwd or task.cwd,
             dlvToolPath = mason_bin("delve"),
         }
     end,
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
-            mode = dbg.mode or "local",
-            processId = dbg.processId,
+            mode = task.mode or "local",
+            processId = task.processId,
         }
     end,
 }
@@ -338,23 +340,23 @@ debuggers.chrome = {
         command = { mason_bin("chrome-debug-adapter") },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "chrome",
             request = "launch",
-            url = dbg.url or "http://localhost:3000",
-            webRoot = context.task.cwd or dbg.cwd,
-            sourceMaps = dbg.sourceMaps ~= false,
-            userDataDir = dbg.userDataDir ~= false,
+            url = task.url or "http://localhost:3000",
+            webRoot = context.task.cwd or task.cwd,
+            sourceMaps = task.sourceMaps ~= false,
+            userDataDir = task.userDataDir ~= false,
         }
     end,
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "chrome",
             request = "attach",
-            port = dbg.port or 9222,
-            webRoot = context.task.cwd or dbg.cwd,
+            port = task.port or 9222,
+            webRoot = context.task.cwd or task.cwd,
         }
     end,
 }
@@ -370,7 +372,7 @@ debuggers.bash = {
         command = { mason_bin("bash-debug-adapter") },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             name = "Launch Bash Script",
             type = "bashdb",
@@ -398,13 +400,13 @@ debuggers.php = {
         command = { mason_bin("php-debug") },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             name = "Listen for Xdebug",
             type = "php",
             request = "launch",
-            port = dbg.port or 9003,
-            pathMappings = dbg.pathMappings or { ["/var/www/html"] = context.task.cwd or dbg.cwd },
+            port = task.port or 9003,
+            pathMappings = task.pathMappings or { ["/var/www/html"] = context.task.cwd or task.cwd },
         }
     end,
 }
@@ -421,11 +423,11 @@ debuggers.java = {
         port = 0,
     },
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             request = "attach",
-            hostName = dbg.hostName or "127.0.0.1",
-            port = dbg.port or 5005,
+            hostName = task.hostName or "127.0.0.1",
+            port = task.port or 5005,
         }
     end,
 }
@@ -442,21 +444,21 @@ debuggers.netcoredbg = { -- renamed key to match common usage (was "csharp")
         args = { "--interpreter=vscode" },
     },
     launch_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "coreclr",
             request = "launch",
-            program = dbg.program or function()
+            program = task.program or function()
                 return vim.fn.input("Path to dll: ", context.proj_dir .. "/bin/Debug/", "file")
             end,
         }
     end,
     attach_args = function(context)
-        local dbg = context.task.debug or {}
+        local task = context.task
         return {
             type = "coreclr",
             request = "attach",
-            processId = dbg.processId or "${select-pid}",
+            processId = task.processId or "${select-pid}",
         }
     end,
 }

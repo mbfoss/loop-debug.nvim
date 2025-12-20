@@ -89,7 +89,7 @@ return {
             type = "debug",
             command = "${file:python}",
             cwd = "${projdir}",
-            type = "debugpy",
+            debugger = "debugpy",
             request = "launch",
             justMyCode = false,
         }
@@ -99,11 +99,9 @@ return {
         task = {
             name = "Attach",
             type = "debug",
-            debug = {
-                debugger = "debugpy:remote",
-                request = "attach",
-                justMyCode = false,
-            },
+            debugger = "debugpy:remote",
+            request = "attach",
+            justMyCode = false,
         }
     },
     -- ==================================================================
@@ -115,7 +113,7 @@ return {
             name = "Debug Go program (delve)",
             type = "debug",
             cwd = "${projdir}",
-            type = "go",
+            debugger = "go",
             request = "launch",
             mode = "debug",
         }

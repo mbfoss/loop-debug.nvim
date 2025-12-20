@@ -1,17 +1,17 @@
 local class = require('loop.tools.class')
-local ItemListPage = require('loop.pages.ItemListPage')
-local config = require('loop.config')
+local ItemListComp = require('loop.comp.ItemList')
+local config = require('loop-debug.config')
 local selector = require('loop.tools.selector')
 local Trackers = require("loop.tools.Trackers")
 
----@class loop.pages.StackTracePage : loop.pages.ItemListPage
----@field new fun(self: loop.pages.StackTracePage, name:string): loop.pages.StackTracePage
-local StackTracePage = class(ItemListPage)
+---@class loopdebug.comp.StackTrace : loop.comp.ItemList
+---@field new fun(self: loopdebug.comp.StackTrace, name:string): loopdebug.comp.StackTrace
+local StackTrace = class(ItemListComp)
 
----@param item loop.pages.ItemListPage.Item
----@param highlights loop.pages.ItemListPage.Highlight[]
+---@param item loop.comp.ItemList.Item
+---@param highlights loop.comp.ItemList.Highlight[]
 local function _item_formatter(item, highlights)
-    ---@type loop.pages.ItemListPage.Highlight[]
+    ---@type loop.comp.ItemList.Highlight[]
     local hls = {}
 
     local frame = item.data.frame
@@ -87,9 +87,8 @@ local function _item_formatter(item, highlights)
 end
 
 
----@param name string
-function StackTracePage:init(name)
-    ItemListPage.init(self, name, {
+function StackTrace:init()
+    ItemListComp.init(self, {
         formatter = _item_formatter,
     })
 
@@ -111,7 +110,7 @@ function StackTracePage:init(name)
 end
 
 ---@param callback fun(frame:loopdebug.proto.StackFrame)
-function StackTracePage:add_frame_tracker(callback)
+function StackTrace:add_frame_tracker(callback)
     self._frametrackers:add_tracker({
         frame_selected = callback
     })
@@ -119,10 +118,10 @@ end
 
 ---@param data loopdebug.session.DataProviders
 ---@param thread_id number
-function StackTracePage:set_content(data, thread_id)
+function StackTrace:set_content(data, thread_id)
     data.stack_provider({
             threadId = thread_id,
-            levels = config.current.debug.stack_levels_limit or 100,
+            levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
             local text = "Thread " .. tostring(thread_id)
@@ -132,7 +131,7 @@ function StackTracePage:set_content(data, thread_id)
             } }
             if resp then
                 for idx, frame in ipairs(resp.stackFrames) do
-                    ---@type loop.pages.ItemListPage.Item
+                    ---@type loop.comp.ItemList.Item
                     local item = { id = idx, data = { frame = frame } }
                     table.insert(items, item)
                 end
@@ -141,11 +140,11 @@ function StackTracePage:set_content(data, thread_id)
         end)
 end
 
-function StackTracePage:clear_content()
+function StackTrace:clear_content()
     self:set_items({})
 end
 
-function StackTracePage:greyout_content()
+function StackTrace:greyout_content()
     local items = self:get_items()
     for _, item in ipairs(items) do
         item.data.greyout = true
@@ -153,4 +152,4 @@ function StackTracePage:greyout_content()
     self:refresh_content()
 end
 
-return StackTracePage
+return StackTrace

@@ -1,7 +1,7 @@
 ---@class loop.signs
 local M                = {}
 
-local config           = require("loop.config")
+local config           = require("loop-debug.config")
 local Trackers         = require('loop.tools.Trackers')
 
 ---@alias loop.signs.SignGroup '"breakpoints"'|'"currentframe"'
@@ -126,7 +126,7 @@ function M.place_file_sign(id, file, line, group, name)
         group = group,
         name = name,
         lnum = line,
-        priority = config.current.debug.sign_priority[group] or 12,
+        priority = config.current.sign_priority[group] or 12,
     }
 
     name_table[id] = sign

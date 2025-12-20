@@ -1,12 +1,12 @@
 local class = require('loop.tools.class')
-local ItemTreePage = require('loop.pages.ItemTreePage')
+local ItemTreeComp = require('loop.comp.ItemTree')
 local strtools = require('loop.tools.strtools')
 
----@alias loop.pages.VarWatchPage.Item loop.pages.ItemTreePage.Item
+---@alias loopdebug.comp.VarWatch.Item loop.comp.ItemTree.Item
 
----@class loop.pages.VarWatchPage : loop.pages.ItemTreePage
----@field new fun(self: loop.pages.VarWatchPage, name:string): loop.pages.VarWatchPage
-local VarWatchPage = class(ItemTreePage)
+---@class loopdebug.comp.VarWatch : loop.comp.ItemTree
+---@field new fun(self: loopdebug.comp.VarWatch, name:string): loopdebug.comp.VarWatch
+local VarWatch = class(ItemTreeComp)
 
 local _vartype_to_group = {
     -- primitives
@@ -44,7 +44,7 @@ end
 
 ---@param id any
 ---@param data any
----@param highlights loop.pages.ItemTreePage.Highlight
+---@param highlights loop.comp.ItemTree.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
     if not data then return "" end
@@ -110,13 +110,10 @@ local function floating_input_at_cursor(opts)
     })
 end
 
----@param name string
-function VarWatchPage:init(name)
-    ItemTreePage.init(self, name, {
+function VarWatch:init()
+    ItemTreeComp.init(self, {
         formatter = _variable_node_formatter,
     })
-    self:_add_keymaps()
-
     ---@type string[]
     self._watch_exressions = {}
     self._cur_data_provider = nil
@@ -128,12 +125,15 @@ function VarWatchPage:init(name)
     self:_load_expressions()
 end
 
-function VarWatchPage:_add_keymaps()
+---@param page_ctrl loop.PageControl
+function VarWatch:link_to_page(page_ctrl)
+    ItemTreeComp.link_to_page(self, page_ctrl)
+
     --- Helper: edit an existing watch or add a new one
     local function add_watch()
         local win = vim.api.nvim_get_current_win()
         local cursor = vim.api.nvim_win_get_cursor(win)
-        local col_offset = -cursor[2] 
+        local col_offset = -cursor[2]
         local row_offset = 0
         floating_input_at_cursor({
             row_offset = row_offset,
@@ -159,15 +159,16 @@ function VarWatchPage:_add_keymaps()
     end
 
     -- Add keymaps
-    self:add_keymap("i", {
+    page_ctrl.add_keymap("i", {
         desc = "Add watch (inline)",
         callback = function() add_watch() end,
     })
 
-    self:add_keymap("d", {
+    page_ctrl.add_keymap("d", {
         desc = "Delete watch",
         callback = function()
-            local cur_item = self:get_cur_item()
+            ---@type loop.comp.ItemTree.Item|nil
+            local cur_item = self:get_cur_item(page_ctrl)
             if not cur_item then return end
             -- Remove from _watch_expressions
             for i, expr in ipairs(self._watch_exressions) do
@@ -186,15 +187,15 @@ end
 ---@param data_provider loopdebug.session.DataProviders
 ---@param ref number
 ---@param parent_id number|string
----@param callback fun(items:loop.pages.VariablesPage.Item[])
-function VarWatchPage:_load_variables(data_provider, ref, parent_id, callback)
+---@param callback fun(items:loopdebug.comp.Variables.Item[])
+function VarWatch:_load_variables(data_provider, ref, parent_id, callback)
     data_provider.variables_provider({ variablesReference = ref },
         function(_, vars_data)
             local children = {}
             if vars_data then
                 for _, var in ipairs(vars_data.variables) do
                     local item_id = parent_id .. strtools.escape_marker1() .. var.name
-                    ---@type loop.pages.VariablesPage.Item
+                    ---@type loopdebug.comp.Variables.Item
                     local var_item = {
                         id = item_id,
                         parent = parent_id,
@@ -221,16 +222,16 @@ function VarWatchPage:_load_variables(data_provider, ref, parent_id, callback)
         end)
 end
 
-function VarWatchPage:_load_expressions()
-    ---@type loop.pages.ItemTreePage.Item[]
+function VarWatch:_load_expressions()
+    ---@type loop.comp.ItemTree.Item[]
     for _, expr in ipairs(self._watch_exressions) do
         self:_load_expr_value(expr)
     end
 end
 
 ---@param expr string
-function VarWatchPage:_load_expr_value(expr)
-    ---@type loop.pages.VariablesPage.Item
+function VarWatch:_load_expr_value(expr)
+    ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = expr,
         parent = nil,
@@ -271,13 +272,13 @@ end
 
 ---@param data_provider loopdebug.session.DataProviders
 ---@param frame loopdebug.proto.StackFrame
-function VarWatchPage:update_data(data_provider, frame)
+function VarWatch:update_data(data_provider, frame)
     self._cur_data_provider = data_provider
     self._cur_frame = frame
     self:_load_expressions()
 end
 
-function VarWatchPage:greyout_content()
+function VarWatch:greyout_content()
     local items = self:get_items()
     for _, item in ipairs(items) do
         item.data.greyout = true
@@ -286,4 +287,4 @@ function VarWatchPage:greyout_content()
     self:refresh_content()
 end
 
-return VarWatchPage
+return VarWatch

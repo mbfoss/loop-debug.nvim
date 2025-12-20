@@ -1,12 +1,12 @@
 local class = require('loop.tools.class')
-local ItemTreePage = require('loop.pages.ItemTreePage')
+local ItemTreeComp = require('loop.comp.ItemTree')
 local strtools = require('loop.tools.strtools')
 
----@alias loop.pages.VariablesPage.Item loop.pages.ItemTreePage.Item
+---@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
 
----@class loop.pages.VariablesPage : loop.pages.ItemTreePage
----@field new fun(self: loop.pages.VariablesPage, name:string): loop.pages.VariablesPage
-local VariablesPage = class(ItemTreePage)
+---@class loopdebug.comp.Variables : loop.comp.ItemTree
+---@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
+local Variables = class(ItemTreeComp)
 
 local _vartype_to_group = {
     -- primitives
@@ -44,7 +44,7 @@ end
 
 ---@param id any
 ---@param data any
----@param highlights loop.pages.ItemTreePage.Highlight
+---@param highlights loop.comp.ItemTree.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
     if not data then return "" end
@@ -69,15 +69,15 @@ end
 ---@param data_providers loopdebug.session.DataProviders
 ---@param ref number
 ---@param parent_id string
----@param callback fun(items:loop.pages.VariablesPage.Item[])
-function VariablesPage:_load_variables(data_providers, ref, parent_id, callback)
+---@param callback fun(items:loopdebug.comp.Variables.Item[])
+function Variables:_load_variables(data_providers, ref, parent_id, callback)
     data_providers.variables_provider({ variablesReference = ref },
         function(_, vars_data)
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
                     local item_id = parent_id .. strtools.escape_marker1() .. var.name
-                    ---@type loop.pages.VariablesPage.Item
+                    ---@type loopdebug.comp.Variables.Item
                     local var_item = {
                         id = item_id,
                         parent = parent_id,
@@ -100,7 +100,7 @@ function VariablesPage:_load_variables(data_providers, ref, parent_id, callback)
                     table.insert(children, var_item)
                 end
             else
-                ---@type loop.pages.VariablesPage.Item
+                ---@type loopdebug.comp.Variables.Item
                 local var_item = {
                     id = {}, -- a unique id
                     parent =
@@ -116,9 +116,9 @@ end
 ---@param parent_id string
 ---@param scopes loopdebug.proto.Scope[]
 ---@param data_providers loopdebug.session.DataProviders
----@param scopes_cb loop.pages.ItemTreePage.ChildrenCallback
-function VariablesPage:_load_scopes(parent_id, scopes, data_providers, scopes_cb)
-    ---@type loop.pages.ItemTreePage.Item[]
+---@param scopes_cb loop.comp.ItemTree.ChildrenCallback
+function Variables:_load_scopes(parent_id, scopes, data_providers, scopes_cb)
+    ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}
     for scope_idx, scope in ipairs(scopes) do
         local item_id = scope.name
@@ -135,7 +135,7 @@ function VariablesPage:_load_scopes(parent_id, scopes, data_providers, scopes_cb
                 expanded = true
             end
         end
-        ---@type loop.pages.ItemTreePage.Item
+        ---@type loop.comp.ItemTree.Item
         local scope_item = {
             id = item_id,
             expanded = expanded,
@@ -153,9 +153,8 @@ function VariablesPage:_load_scopes(parent_id, scopes, data_providers, scopes_cb
     scopes_cb(scope_items)
 end
 
----@param name string
-function VariablesPage:init(name)
-    ItemTreePage.init(self, name, {
+function Variables:init()
+    ItemTreeComp.init(self, {
         formatter = _variable_node_formatter
     })
     ---@type table<any,boolean> -- id --> expanded
@@ -166,8 +165,8 @@ end
 ---@param sess_name string
 ---@param data_providers loopdebug.session.DataProviders
 ---@param frame loopdebug.proto.StackFrame
-function VariablesPage:load_variables(sess_id, sess_name, data_providers, frame)
-    ---@type loop.pages.ItemTreePage.Item
+function Variables:load_variables(sess_id, sess_name, data_providers, frame)
+    ---@type loop.comp.ItemTree.Item
     local root_item = {
         id = tostring(sess_id),
         expanded = true,
@@ -184,7 +183,7 @@ function VariablesPage:load_variables(sess_id, sess_name, data_providers, frame)
 end
 
 ---@param sess_id any
-function VariablesPage:greyout_session(sess_id)
+function Variables:greyout_session(sess_id)
     self._layout_cache = {}
     local items = self:get_item_and_children(tostring(sess_id))
     for _, item in ipairs(items) do
@@ -194,4 +193,4 @@ function VariablesPage:greyout_session(sess_id)
     self:refresh_content()
 end
 
-return VariablesPage
+return Variables

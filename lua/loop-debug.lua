@@ -19,6 +19,10 @@ local DEFAULT_CONFIG = {
         breakpoints = 12,
         currentframe = 13,
     },
+    symbols = {
+        running = "▶",
+        paused  = "⏸",
+    },
     debuggers = require("loop-debug.debuggers")
 }
 
@@ -61,20 +65,18 @@ function M.init()
     end
 
     require('loop-debug.signs').init()
-
+    require('loop-debug.bpts_ui').init()
 
     if config.current.default_keymaps then
         vim.keymap.set("n", "<leader>db", ":LoopDebug breakpoint<CR>", { desc = "Toggle breakpoint", silent = true })
         vim.keymap.set("n", "<leader>dB", ":LoopDebug breakpoint list<CR>", { desc = "List breakpoints", silent = true })
         vim.keymap.set("n", "<leader>dm", ":LoopDebug debug_mode<CR>", { desc = "Toggle debug mode", silent = true })
-        vim.keymap.set("n", "<leader>ds", ":LoopDebug debug session<CR>",
-            { desc = "Select debug session", silent = true })
-        vim.keymap.set("n", "<leader>dt", ":LoopDebug debug thread<CR>", { desc = "Select thread", silent = true })
-        vim.keymap.set("n", "<leader>dc", ":LoopDebug debug continue<CR>",
-            { desc = "Continue paused session", silent = true })
-        vim.keymap.set("n", "<leader>dC", ":LoopDebug debug continue_all<CR>",
+        vim.keymap.set("n", "<leader>ds", ":LoopDebug session<CR>", { desc = "Select debug session", silent = true })
+        vim.keymap.set("n", "<leader>dt", ":LoopDebug thread<CR>", { desc = "Select thread", silent = true })
+        vim.keymap.set("n", "<leader>dc", ":LoopDebug continue<CR>", { desc = "Continue paused session", silent = true })
+        vim.keymap.set("n", "<leader>dC", ":LoopDebug continue_all<CR>",
             { desc = "Continue all paused sesions", silent = true })
-        vim.keymap.set("n", "<leader>dK", ":LoopDebug debug terminate_all<CR>",
+        vim.keymap.set("n", "<leader>dK", ":LoopDebug terminate_all<CR>",
             { desc = "Terminal all debug sessions", silent = true })
     end
 end
@@ -82,11 +84,17 @@ end
 -----------------------------------------------------------
 -- Command completion
 -----------------------------------------------------------
+local function _debug_commands()
+    return { "breakpoint", "session", "thread", "continue", "step_in", "step_out", "step_over", "step_back", "terminate",
+        "continue_all", "terminate_all", "debug_mode" }
+end
 
 local function _debug_subcommands(args)
-    if #args == 0 then
-        return { "session", "thread", "continue", "step_in", "step_out", "step_over", "step_back", "terminate",
-            "continue_all", "terminate_all" }
+    if #args == 2 then
+        return _debug_commands()
+    end
+    if #args == 3 and args[2] == "breakpoint" then
+        return { "list", "toggle", "logpoint", "clear_file", "clear_all" }
     end
     return {}
 end
@@ -97,7 +105,7 @@ function M.complete(arg_lead, cmd_line)
     local function filter(strs)
         local out = {}
         for _, s in ipairs(strs or {}) do
-            if not vim.startswith(s, '_') and vim.startswith(s, arg_lead) then
+            if vim.startswith(s, arg_lead) then
                 table.insert(out, s)
             end
         end
@@ -109,12 +117,7 @@ function M.complete(arg_lead, cmd_line)
         table.insert(args, ' ')
     end
 
-    if #args == 2 then
-        local values = filter(_debug_subcommands())
-        return values
-    end
-
-    return {}
+    return filter(_debug_subcommands(args))
 end
 
 -----------------------------------------------------------
@@ -134,7 +137,7 @@ function M.dispatch(opts)
         )
         return
     end
-    if not vim.tbl_contains(_debug_subcommands(), subcmd) then
+    if not vim.tbl_contains(_debug_commands(), subcmd) then
         vim.notify("LoopDebug invalid command " .. subcmd, vim.log.levels.ERROR)
         return
     end

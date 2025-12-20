@@ -1,16 +1,18 @@
-local config         = require("loop-debug.config")
-local signs          = require('loop-debug.signs')
-local debugmode      = require('loop-debug.debugmode')
-local filetools      = require('loop.tools.file')
-local OutputPage     = require('loop.pages.OutputPage')
-local ItemListPage   = require('loop.pages.ItemListPage')
-local VariablesPage  = require('loop-debug.pages.VariablesPage')
-local VarWatchPage   = require('loop-debug.pages.VarWatchPage')
-local StackTracePage = require('loop-debug.pages.StackTracePage')
-local uitools        = require('loop.tools.uitools')
-local notifications  = require('loop.notifications')
-local selector       = require('loop.tools.selector')
-local M              = {}
+local config          = require("loop-debug.config")
+local signs           = require('loop-debug.signs')
+local debugmode       = require('loop-debug.debugmode')
+local filetools       = require('loop.tools.file')
+local ItemListComp    = require('loop.comp.ItemList')
+local OutputLinesComp = require('loop.comp.OutputLines')
+local VariablesComp   = require('loop-debug.comp.Variables')
+local VarWatchComp    = require('loop-debug.comp.VarWatch')
+local StackTraceComp  = require('loop-debug.comp.StackTrace')
+local uitools         = require('loop.tools.uitools')
+local notifications   = require('loop.notifications')
+local selector        = require('loop.tools.selector')
+local breakpoints_ui  = require('loop-debug.bpts_ui')
+
+local M               = {}
 
 ---@class loop.debugui.SessionData
 ---@field sess_name string|nil
@@ -20,19 +22,24 @@ local M              = {}
 ---@field paused_threads table<number,boolean>
 ---@field cur_thread_id number|nil
 ---@field top_frame loopdebug.proto.StackFrame|nil
+---@field adapter_output_comp loop.comp.OutputLines|nil
+---@field debuggee_output_comp loop.comp.OutputLines|nil
 
 ---@class loop.debugui.DebugJobData
 ---@field jobname string
 ---@field page_manager loop.PageManager
 ---@field current_session_id number|nil
 ---@field session_data table<number,loop.debugui.SessionData>
----@field task_page loop.pages.ItemListPage
+---@field task_list_comp loop.comp.ItemList
+---@field variables_comp loopdebug.comp.Variables
+---@field varwatch_comp loopdebug.comp.VarWatch
+---@field stacktrace_comp loopdebug.comp.StackTrace
 ---@field command fun(data:loop.debugui.DebugJobData,cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
 ---@type loop.debugui.DebugJobData|nil
 local _current_job_data
 
-local _page_groups   = {
+local _page_groups    = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -73,21 +80,8 @@ local function _switch_to_frame(jobdata, frame)
 
     _jump_to_frame(frame)
 
-    ---@type loop.pages.VariablesPage|nil
-    ---@diagnostic disable-next-line: assign-type-mismatch
-    local vars_page = jobdata.page_manager.get_page(_page_groups.variables, _page_groups.variables)
-
-    ---@type loop.pages.VarWatchPage|nil
-    ---@diagnostic disable-next-line: assign-type-mismatch
-    local watch_page = jobdata.page_manager.get_page(_page_groups.watch, _page_groups.watch)
-
-    assert(not vars_page or getmetatable(vars_page) == VariablesPage)
-    assert(not watch_page or getmetatable(watch_page) == VarWatchPage)
-
-    if vars_page then vars_page:load_variables(sess_id, sess_name, data_providers, frame) end
-    if watch_page and sess_id == jobdata.current_session_id then
-        watch_page:update_data(data_providers, frame)
-    end
+    jobdata.variables_comp:load_variables(sess_id, sess_name, data_providers, frame)
+    jobdata.varwatch_comp:update_data(data_providers, frame)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -124,11 +118,11 @@ local function _refresh_task_page(jobdata)
     local session_ids = vim.tbl_keys(jobdata.session_data)
     vim.fn.sort(session_ids)
 
-    ---@type loop.pages.ItemListPage.Item[]
+    ---@type loop.comp.ItemList.Item[]
     local list_items = {}
     local uiflags = ''
 
-    local symbols = config.current.window.symbols
+    local symbols = config.current.symbols
 
     for _, sess_id in ipairs(session_ids) do
         local sdata = jobdata.session_data[sess_id]
@@ -152,9 +146,9 @@ local function _refresh_task_page(jobdata)
         table.insert(list_items, item)
     end
 
-    jobdata.task_page:set_items(list_items)
-    jobdata.task_page:set_current_item_by_id(jobdata.current_session_id)
-    jobdata.task_page:set_ui_flags(uiflags)
+    jobdata.task_list_comp:set_items(list_items)
+    jobdata.task_list_comp:set_current_item_by_id(jobdata.current_session_id)
+    jobdata.task_list_comp:set_ui_flags(uiflags)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -166,8 +160,8 @@ local function _switch_to_session(jobdata, sess_id, force, thread_pause_evt)
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
-    local thraed_id = thread_pause_evt and thread_pause_evt.thread_id or nil
-    if not thraed_id then return end
+    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or nil
+    if not thread_id then return end
 
     if thread_pause_evt then
         sess_data.paused_threads[thread_pause_evt.thread_id] = true
@@ -189,16 +183,9 @@ local function _switch_to_session(jobdata, sess_id, force, thread_pause_evt)
     jobdata.current_session_id = sess_id
     _refresh_task_page(jobdata)
 
-    _switch_to_thread(jobdata, sess_id, thraed_id, force)
+    _switch_to_thread(jobdata, sess_id, thread_id, force)
 
-    ---@type loop.pages.StackTracePage|nil
-    ---@diagnostic disable-next-line: assign-type-mismatch
-    local stack_page = jobdata.page_manager.get_page(_page_groups.stack, _page_groups.stack)
-    assert(not stack_page or getmetatable(stack_page) == StackTracePage)
-
-    if stack_page and sess_id == jobdata.current_session_id then
-        stack_page:set_content(sess_data.data_providers, thraed_id)
-    end
+    jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -321,32 +308,9 @@ end
 ---@param jobdata loop.debugui.DebugJobData
 ---@param sess_id number
 local function _greyout_thread_context_pages(jobdata, sess_id)
-    local vars_page = jobdata.page_manager.get_page(_page_groups.variables, _page_groups.variables)
-    local watch_page = jobdata.page_manager.get_page(_page_groups.watch, _page_groups.watch)
-    local stack_page = jobdata.page_manager.get_page(_page_groups.stack, _page_groups.stack)
-
-    assert(not vars_page or getmetatable(vars_page) == VariablesPage)
-    assert(not watch_page or getmetatable(watch_page) == VarWatchPage)
-    assert(not stack_page or getmetatable(stack_page) == StackTracePage)
-
-    if vars_page then
-        ---@type loop.pages.VariablesPage
-        ---@diagnostic disable-next-line: assign-type-mismatch
-        local page = vars_page
-        page:greyout_session(sess_id)
-    end
-    if watch_page and sess_id == jobdata.current_session_id then
-        ---@type loop.pages.VarWatchPage
-        ---@diagnostic disable-next-line: assign-type-mismatch
-        local page = watch_page
-        page:greyout_content()
-    end
-    if stack_page and sess_id == jobdata.current_session_id then
-        ---@type loop.pages.StackTracePage
-        ---@diagnostic disable-next-line: assign-type-mismatch
-        local page = stack_page
-        page:greyout_content()
-    end
+    jobdata.variables_comp:greyout_session(sess_id)
+    jobdata.varwatch_comp:greyout_content()
+    jobdata.stacktrace_comp:greyout_content()
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -370,27 +334,37 @@ end
 ---@param category string
 ---@param output string
 local function _on_session_output(jobdata, sess_id, sess_name, category, output)
+    local sess_data = jobdata.session_data[sess_id]
+    assert(sess_data, "missing session data")
+
     local level = category == "stderr" and "error" or nil
 
     local is_debuggee = (category == "stdout" or category == "stderr")
-    local group_id = is_debuggee and _page_groups.output or _page_groups.debugger
-
-    local page = jobdata.page_manager.get_page(group_id, tostring(sess_id))
-    if not page and not jobdata.page_manager.expired() then
-        local pagegroup = jobdata.page_manager.get_page_group(group_id)
-        if not pagegroup then
-            local label = is_debuggee and "Debug Output" or "Debugger"
-            pagegroup = jobdata.page_manager.add_page_group(group_id, label)
+    local output_comp
+    if is_debuggee then
+        output_comp = sess_data.debuggee_output_comp
+        if not output_comp then
+            local page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
+            local page_ctrl = page_group.add_page(tostring(sess_id), sess_name)
+            output_comp = OutputLinesComp:new()
+            output_comp:link_to_page(page_ctrl)
+            sess_data.debuggee_output_comp = output_comp
         end
-        local base_page = pagegroup.add_page(tostring(sess_id), sess_name)
-        page = OutputPage:new(sess_name)
+    else
+        output_comp = sess_data.adapter_output_comp
+        if not output_comp then
+            local page_group = jobdata.page_manager.add_page_group(_page_groups.debugger, "Debugger")
+            local page_ctrl = page_group.add_page(tostring(sess_id), sess_name)
+            output_comp = OutputLinesComp:new()
+            output_comp:link_to_page(page_ctrl)
+            sess_data.adapter_output_comp = output_comp
+        end
     end
 
-    if page then
-        ---@type loop.pages.OutputPage
-        ---@diagnostic disable-next-line: assign-type-mismatch
-        local output_page = page
-        output_page:add_line(output, level)
+    for line in output:gmatch("([^\n]*)\n?") do
+        if line ~= "" then
+            output_comp:add_line(line, nil)
+        end
     end
 end
 
@@ -423,7 +397,7 @@ local function _on_session_new_term_req(jobdata, name, args, cb)
     end
 end
 
----@param item loop.pages.ItemListPage.Item
+---@param item loop.comp.ItemList.Item
 local function _debug_session_item_formatter(item)
     local str = item.data.label
     if item.data.nb_paused_threads and item.data.nb_paused_threads > 0 then
@@ -474,30 +448,29 @@ end
 function M.track_new_debugjob(task_name, page_manager)
     assert(type(task_name) == "string")
 
-    local task_page = ItemListPage:new(task_name, {
+    local tasklist_comp = ItemListComp:new({
         formatter = _debug_session_item_formatter,
         show_current_prefix = true,
     })
 
-    local varwatch_page = VarWatchPage:new(task_name)
-    local variables_page = VariablesPage:new(task_name)
-    local stacktrace_page = StackTracePage:new(task_name)
+    local varwatch_comp = VarWatchComp:new(task_name)
+    local variables_comp = VariablesComp:new(task_name)
+    local stacktrace_comp = StackTraceComp:new(task_name)
 
-    page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", task_page, true)
-    page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, varwatch_page)
-    page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables, variables_page)
-    page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack, stacktrace_page)
+    page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
+    page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, "Watch")
+    page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables, "Variables")
+    page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack, "Call Stack")
 
     ---@type loop.debugui.DebugJobData
     local jobdata = {
         jobname = task_name,
         page_manager = page_manager,
         session_data = {},
-        task_page = task_page,
-        output_pages = {},
-        debugger_output_pages = {},
-        stacktrace_pages = {},
-        variable_pages = {},
+        task_list_comp = tasklist_comp,
+        variables_comp = variables_comp,
+        varwatch_comp = varwatch_comp,
+        stacktrace_comp = stacktrace_comp,
         command = function(jobdata, cmd)
             return _on_debug_command(jobdata, cmd)
         end
@@ -508,7 +481,7 @@ function M.track_new_debugjob(task_name, page_manager)
         jobdata:command(cmd)
     end
 
-    task_page:add_tracker({
+    tasklist_comp:add_tracker({
         on_selection = function(item)
             if item then
                 _switch_to_session(jobdata, item.id, false)
@@ -516,7 +489,7 @@ function M.track_new_debugjob(task_name, page_manager)
         end
     })
 
-    stacktrace_page:add_frame_tracker(function (frame)
+    stacktrace_comp:add_frame_tracker(function(frame)
         _switch_to_frame(jobdata, frame)
     end)
 
@@ -555,24 +528,7 @@ function M.track_new_debugjob(task_name, page_manager)
     return tracker
 end
 
----@param command loop.job.DebugJob.Command|nil
-function M.debug_command(command)
-    local job = _current_job_data
-    if not job then
-        notifications.notify("No active debug task", vim.log.levels.WARN)
-        return
-    end
-    if not command then
-        notifications.notify("Debug command missing", vim.log.levels.WARN)
-        return
-    end
-    local ok, err = job.command(job, command)
-    if not ok then
-        notifications.notify(err or "Debug command failed", vim.log.levels.WARN)
-    end
-end
-
-function M.toggle_debug_mode()
+function _toggle_debug_mode()
     if debugmode.is_active() then
         debugmode.disable_debug_mode()
         return
@@ -590,6 +546,32 @@ function M.toggle_debug_mode()
     end
     debugmode.enable_debug_mode()
     _switch_to_frame(job, session_data.top_frame)
+end
+
+---@param command loop.job.DebugJob.Command|nil
+---@param args string[]|nil
+function M.debug_command(command, args)
+    if command == "breakpoint" then
+        breakpoints_ui.breakpoints_command(args and args[1] or nil)
+        return
+    end
+    local job = _current_job_data
+    if not job then
+        notifications.notify("No active debug task", vim.log.levels.WARN)
+        return
+    end
+    if not command then
+        notifications.notify("Debug command missing", vim.log.levels.WARN)
+        return
+    end
+    if command == "debug_mode" then
+        _toggle_debug_mode()
+        return
+    end
+    local ok, err = job.command(job, command)
+    if not ok then
+        notifications.notify(err or "Debug command failed", vim.log.levels.WARN)
+    end
 end
 
 return M

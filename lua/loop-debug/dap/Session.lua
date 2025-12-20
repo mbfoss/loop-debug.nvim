@@ -37,6 +37,95 @@ function Session:init(name)
     self._can_send_breakpoints = false
     self._source_breakpoints = { by_location = {}, by_usr_id = {}, by_dap_id = {}, pending_files = {} }
     self._breakpoints_tracker_id = 0
+
+    self._data_providers = self:_create_data_providers()
+end
+
+---@return loopdebug.session.DataProviders
+function Session:_create_data_providers()
+    local is_available = function()
+        return self._base_session ~= nil and self._fsm:curr_state() == 'running'
+    end
+
+    local na_msg = "not available"
+    ---@type loopdebug.session.ThreadsProvider
+    local threads_provider = function(callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_threads(function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end
+    ---@type loopdebug.session.StackProvider
+    local stack_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_stackTrace(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end
+    ---@type loopdebug.session.ScopesProvider
+    local scopes_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_scopes(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end
+    ---@type loopdebug.session.VariablesProvider
+    local variables_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_variables(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end
+    ---@type loopdebug.session.EvaluateProvider
+    local evaluate_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_evaluate(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end
+    ---@type loopdebug.session.DataProviders
+    return {
+        threads_provider = threads_provider,
+        stack_provider = stack_provider,
+        scopes_provider = scopes_provider,
+        variables_provider = variables_provider,
+        evaluate_provider = evaluate_provider,
+    }
 end
 
 ---@param args loopdebug.session.Args
@@ -156,10 +245,6 @@ function Session:start(args)
 
     vim.schedule(function()
         self._fsm:start()
-    end)
-
-    self._data_providers = daptools.create_data_providers(self._base_session, function()
-        return self._fsm:curr_state() ~= "running"
     end)
 
     return true

@@ -116,11 +116,7 @@ function BaseSession:_handle_event(msg)
         self.log:warn("Unhandled DAP event: " .. msg.event)
         return
     end
-    local cb_error = function(err)
-        self.log:error("Error in event handler for " .. msg.event ..
-            debug.traceback("Error: " .. tostring(err) .. "\n", 2))
-    end
-    xpcall(function() handler(msg.body) end, cb_error)
+    handler(msg.body)
 end
 
 ---@param msg loopdebug.proto.Response
@@ -131,12 +127,7 @@ function BaseSession:_handle_resp(msg)
         return
     end
     self.callbacks[msg.request_seq] = nil
-
-    local error_cb = function(err)
-        self.log:error("Error in response handler for " .. tostring(msg.command) ..
-            debug.traceback("Error: " .. tostring(err) .. "\n", 2))
-    end
-    xpcall(function() cb(msg) end, error_cb)
+    cb(msg)
 end
 
 ---@param msg loopdebug.proto.Request
@@ -163,16 +154,7 @@ function BaseSession:_handle_rev_req(msg)
         return
     end
 
-    local error_cb = function(err)
-        self.log:error("Error in reverse request handler for " .. tostring(msg.command) ..
-            debug.traceback("Error: " .. tostring(err) .. "\n", 2))
-    end
-    local ok = xpcall(function()
-        handler(msg.arguments or {}, send_success, send_failure)
-    end, error_cb)
-    if not ok then
-        send_failure("Error in reverse request handler")
-    end
+    handler(msg.arguments or {}, send_success, send_failure)
 end
 
 ---@param command string

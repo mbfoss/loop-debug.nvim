@@ -7,8 +7,8 @@ local uitools           = require("loop.tools.uitools")
 
 local M                 = {}
 
-local _setup_done       = false
-local _setup_err_msg    = "setup() not called"
+local _init_done       = false
+local _init_err_msg    = "init() not called"
 
 ---@class loop.debugui.Tracker
 ---@field on_bp_added fun(bp:loopdebug.SourceBreakpoint, verified:boolean)|nil
@@ -97,7 +97,7 @@ end
 ---@param task_name string -- task name
 ---@return loop.job.debugjob.Tracker
 function M.track_new_debugjob(task_name)
-    assert(_setup_done, _setup_err_msg)
+    assert(_init_done, _init_err_msg)
     assert(type(task_name) == "string")
 
     ---@type loop.job.debugjob.Tracker
@@ -240,7 +240,7 @@ end
 
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
-    assert(_setup_done, _setup_err_msg)
+    assert(_init_done, _init_err_msg)
     local proj_dir = projinfo.get_proj_dir()
     if not proj_dir then
         vim.notify('No active project')
@@ -287,15 +287,13 @@ function M.breakpoints_command(command)
     end
 end
 
---- Setup the breakpoint sign system and autocommands.
----@param _? table Optional setup options (currently unused)
-function M.setup(_)
-    assert(not _setup_done, "setup already done")
-    _setup_done = true
+function M.init()
+    assert(not _init_done, "init already done")
+    _init_done = true
 
     _enable_breakpoint_sync_on_save()
 
-    require('loopdebug.breakpoints').add_tracker({
+    require('loop-debug.dap.breakpoints').add_tracker({
         on_added = _on_breakpoint_added,
         on_removed = _on_breakpoint_removed,
         on_all_removed = _on_all_breakpoints_removed
