@@ -457,10 +457,15 @@ function M.track_new_debugjob(task_name, page_manager)
     local variables_comp = VariablesComp:new(task_name)
     local stacktrace_comp = StackTraceComp:new(task_name)
 
-    page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
-    page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, "Watch")
-    page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables, "Variables")
-    page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack, "Call Stack")
+    local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
+    local watch_page = page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, "Watch")
+    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables, "Variables")
+    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack, "Call Stack")
+
+    tasklist_comp:link_to_page(tasks_page)
+    varwatch_comp:link_to_page(watch_page)
+    variables_comp:link_to_page(vars_page)
+    stacktrace_comp:link_to_page(stack_page)
 
     ---@type loop.debugui.DebugJobData
     local jobdata = {
