@@ -76,7 +76,7 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
-                    local item_id = parent_id .. strtools.escape_marker1() .. var.name
+                    local item_id = parent_id .. strtools.special_marker1() .. var.name
                     ---@type loopdebug.comp.Variables.Item
                     local var_item = {
                         id = item_id,

@@ -9,7 +9,7 @@ local task_provider =
         state.breakpoints = breakpoints.get_breakpoints()
         return state
     end,
-    set_state = function(state)
+    on_project_loaded = function(proj_dir, state)
         if state.breakpoints then
             breakpoints.set_breakpoints(state.breakpoints)
         end
