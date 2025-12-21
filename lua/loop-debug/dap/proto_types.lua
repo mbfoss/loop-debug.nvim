@@ -128,9 +128,24 @@ error('Cannot require a meta file')
 ---@field endColumn integer?
 ---@field presentationHint loopdebug.proto.Scope.PresentationHint?
 
+---@alias loopdebug.proto.VariablePresentationHint.Kind
+---|"property"
+---|"method"
+---|"class"
+---|"data"
+---|"event"
+---|"baseClass"
+---|"innerClass"
+---|"interface"
+---|"mostDerivedClass"
+---|"virtual"
+
+---@alias loopdebug.proto.VariablePresentationHint.Man.Attributes
+---|("static"|"constant"|"readOnly"|"rawString"|"hasSideEffects"|"skipInEvaluation")[]
+
 ---@class loopdebug.proto.VariablePresentationHint
----@field kind "property"|"method"|"class"|"data"|"event"|"baseClass"|"innerClass"|"interface"|"mostDerivedClass"|"virtual"|nil
----@field attributes ("static"|"constant"|"readOnly"|"rawString"|"hasSideEffects"|"skipInEvaluation")[]|nil
+---@field kind loopdebug.proto.VariablePresentationHint.Kind?
+---@field attributes loopdebug.proto.VariablePresentationHint.Man.Attributes?
 ---@field visibility "public"|"private"|"protected"|"internal"|"final"|nil
 ---@field lazy boolean|nil
 
@@ -721,4 +736,3 @@ error('Cannot require a meta file')
 ---@class loopdebug.proto.ProgressEndEvent
 ---@field progressId string
 ---@field message string|nil
-

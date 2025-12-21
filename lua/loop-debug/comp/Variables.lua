@@ -1,7 +1,7 @@
-local class             = require('loop.tools.class')
-local ItemTreeComp      = require('loop.comp.ItemTree')
-local strtools          = require('loop.tools.strtools')
-local watchexpr         = require('loop-debug.watchexpr')
+local class        = require('loop.tools.class')
+local ItemTreeComp = require('loop.comp.ItemTree')
+local strtools     = require('loop.tools.strtools')
+local watchexpr    = require('loop-debug.watchexpr')
 
 ---@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
 
@@ -13,30 +13,7 @@ local watchexpr         = require('loop-debug.watchexpr')
 
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
-local Variables         = class(ItemTreeComp)
-
-local _vartype_to_group = {
-    -- primitives
-    ["string"]     = "@string",
-    ["number"]     = "@number",
-    ["boolean"]    = "@boolean",
-    ["null"]       = "@constant.builtin",
-    ["undefined"]  = "@constant.builtin",
-    -- functions
-    ["function"]   = "@function",
-    ["function()"] = "@function", -- seen in some DAP servers
-    ["function "]  = "@function",
-    ["func"]       = "@function",
-    ["Function"]   = "@function",
-    -- objects / tables / arrays
-    ["array"]      = "@structure",
-    ["list"]       = "@structure",
-    ["table"]      = "@structure",
-    ["object"]     = "@structure",
-    ["Object"]     = "@structure",
-    ["Array"]      = "@structure",
-    ["Module"]     = "@module",
-}
+local Variables    = class(ItemTreeComp)
 
 local function floating_input_at_cursor(opts)
     local prev_win = vim.api.nvim_get_current_win()
@@ -102,15 +79,25 @@ local function _make_node_id(parent, id)
     return parent .. strtools.special_marker1() .. id
 end
 
----@param vartype string
----@return string|nil
-function _get_vartype_hightlight(vartype)
-    if not vartype then return nil end
-    vartype = tostring(vartype)
-    vartype = vartype:gsub("%s+", "")
-    vartype = vartype:lower()
-    local hl = _vartype_to_group[vartype]
-    return hl or "@variable"
+local _var_kind_to_hl_group = {
+    property         = "@property",
+    method           = "@method",
+    ["class"]        = "@type",
+    data             = "@variable",
+    event            = "@event",
+    baseClass        = "@type",
+    innerClass       = "@type",
+    interface        = "@type",
+    mostDerivedClass = "@type",
+    virtual          = "@keyword",
+}
+---@param kind? loopdebug.proto.VariablePresentationHint.Kind
+---@return string
+function _get_var_highlight(kind)
+    if not kind then
+        return "@variable"
+    end
+    return _var_kind_to_hl_group[kind] or "@variable"
 end
 
 ---@param id any
@@ -118,6 +105,8 @@ end
 ---@param highlights loop.comp.ItemTree.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
+    ---@type loopdebug.proto.VariablePresentationHint|nil
+    local hint = data.presentationHint
     if not data then return "" end
     if data.scopelabel then
         table.insert(highlights, { group = "Directory" })
@@ -130,10 +119,23 @@ local function _variable_node_formatter(id, data, highlights)
         if data.is_na then
             table.insert(highlights, { group = "NonText", start_col = #data.name + 2 })
         else
-            table.insert(highlights, { group = _get_vartype_hightlight(data.type), start_col = #data.name + 2 })
+            local kind = hint and hint.kind or nil
+            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #data.name + 1 })
         end
     end
-    return tostring(data.name) .. ": " .. tostring(data.value)
+    local value = data.value or ""
+    if hint and hint.attributes and vim.list_contains(hint.attributes, "rawString") then
+        -- unwrap quotes and decode escape sequences
+        value = value
+            :gsub("^(['\"])(.*)%1$", "%2")
+            :gsub("\\n", "\n")
+            :gsub("\\t", "\t")
+    end
+    local name = tostring(data.name)
+    if value:find("\n", 1, true) then
+        return name .. ":\n" .. value
+    end
+    return name .. ": " .. tostring(value)
 end
 
 ---@param data_providers loopdebug.session.DataProviders
@@ -154,8 +156,8 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
                         expanded = self._layout_cache[item_id],
                         data = {
                             name = var.name,
-                            type = var.type,
-                            value = var.value
+                            value = var.value,
+                            presentationHint = var.presentationHint
                         },
                     }
                     if var.variablesReference and var.variablesReference > 0 then
@@ -225,7 +227,8 @@ end
 
 function Variables:init()
     ItemTreeComp.init(self, {
-        formatter = _variable_node_formatter
+        formatter = _variable_node_formatter,
+        render_delay_ms = 300,
     })
 
     ---@type loop.comp.ItemTree.Item
@@ -248,7 +251,6 @@ function Variables:init()
     })
 
     self:_load_watch_expressions()
-
 end
 
 ---@param page_ctrl loop.PageControl
@@ -325,6 +327,7 @@ function Variables:_load_watch_expr_value(expr)
             var_item.data.is_na = true
         else
             var_item.data.value = data.result
+            var_item.data.presentationHint = data.presentationHint
             if data.variablesReference and data.variablesReference > 0 then
                 var_item.children_callback = function(cb)
                     if var_item.data.greyout then

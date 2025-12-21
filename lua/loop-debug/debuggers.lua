@@ -145,6 +145,10 @@ debuggers.lldb = {
             cwd = _get_task_cwd(context),
             stopOnEntry = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
+            initCommands = {
+                "command script import lldb.formatters.cpp",
+                "settings set target.max-string-summary-length 1024"
+            }
         }
     end,
     attach_args = function(context)

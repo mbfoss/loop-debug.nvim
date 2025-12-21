@@ -217,7 +217,11 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
         self:_on_subsession_request(sess_id, session, request)
         return
     end
-    error("unhandled dap session event: " .. event)
+    if event == "thread_added" or event == "thread_removed" then
+        -- not needed for now
+        return
+    end
+    vim.notify("LoopDebug: unhandled dap session event: " .. event)
 end
 
 ---@param sess_id number
