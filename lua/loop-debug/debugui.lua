@@ -5,14 +5,13 @@ local filetools       = require('loop.tools.file')
 local ItemListComp    = require('loop.comp.ItemList')
 local OutputLinesComp = require('loop.comp.OutputLines')
 local VariablesComp   = require('loop-debug.comp.Variables')
-local VarWatchComp    = require('loop-debug.comp.VarWatch')
 local StackTraceComp  = require('loop-debug.comp.StackTrace')
 local uitools         = require('loop.tools.uitools')
 local notifications   = require('loop.notifications')
 local selector        = require('loop.tools.selector')
 local breakpoints_ui  = require('loop-debug.bpts_ui')
 
-local M               = {}
+local M            = {}
 
 ---@class loop.debugui.SessionData
 ---@field sess_name string|nil
@@ -35,14 +34,13 @@ local M               = {}
 ---@field session_data table<number,loop.debugui.SessionData>
 ---@field task_list_comp loop.comp.ItemList
 ---@field variables_comp loopdebug.comp.Variables
----@field varwatch_comp loopdebug.comp.VarWatch
 ---@field stacktrace_comp loopdebug.comp.StackTrace
 ---@field command fun(data:loop.debugui.DebugJobData,cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
 ---@type loop.debugui.DebugJobData|nil
 local _current_job_data
 
-local _page_groups    = {
+local _page_groups = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -83,8 +81,7 @@ local function _switch_to_frame(jobdata, frame)
 
     _jump_to_frame(frame)
 
-    jobdata.variables_comp:load_variables(sess_id, sess_name, data_providers, frame)
-    jobdata.varwatch_comp:update_data(data_providers, frame)
+    jobdata.variables_comp:update_data(sess_id, sess_name, data_providers, frame)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -92,7 +89,7 @@ end
 ---@param thread_id number
 local function _switch_to_thread(jobdata, sess_id, thread_id)
     if not sess_id or not thread_id then return end
-    
+
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
@@ -117,7 +114,6 @@ local function _switch_to_thread(jobdata, sess_id, thread_id)
 
     local thread_name = sess_data.thread_names[thread_id]
     jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id, thread_name)
-
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -178,7 +174,6 @@ end
 ---@param sess_id number
 ---@param thread_pause_evt? loopdebug.session.notify.ThreadsEventScope|nil
 local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
-    
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
@@ -402,8 +397,7 @@ end
 ---@param jobdata loop.debugui.DebugJobData
 ---@param sess_id number
 local function _greyout_thread_context_pages(jobdata, sess_id)
-    jobdata.variables_comp:greyout_session(sess_id)
-    jobdata.varwatch_comp:greyout_content()
+    jobdata.variables_comp:greyout_content(sess_id)
     jobdata.stacktrace_comp:greyout_content()
 end
 
@@ -547,19 +541,16 @@ function M.track_new_debugjob(task_name, page_manager)
         show_current_prefix = true,
     })
 
-    local varwatch_comp = VarWatchComp:new(task_name)
     local variables_comp = VariablesComp:new(task_name)
     local stacktrace_comp = StackTraceComp:new(task_name)
 
     local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
-    local watch_page = page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, "Watch")
     local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables,
         "Variables")
     local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack,
         "Call Stack")
 
     tasklist_comp:link_to_page(tasks_page)
-    varwatch_comp:link_to_page(watch_page)
     variables_comp:link_to_page(vars_page)
     stacktrace_comp:link_to_page(stack_page)
 
@@ -570,7 +561,6 @@ function M.track_new_debugjob(task_name, page_manager)
         session_data = {},
         task_list_comp = tasklist_comp,
         variables_comp = variables_comp,
-        varwatch_comp = varwatch_comp,
         stacktrace_comp = stacktrace_comp,
         command = function(jobdata, cmd)
             return _on_debug_command(jobdata, cmd)
@@ -653,10 +643,10 @@ function _toggle_debug_mode()
 end
 
 ---@param command loop.job.DebugJob.Command|nil
----@param args string[]|nil
-function M.debug_command(command, args)
+---@param arg1 string|nil
+function M.debug_command(command, arg1)
     if command == "breakpoint" then
-        breakpoints_ui.breakpoints_command(args and args[1] or nil)
+        breakpoints_ui.breakpoints_command(arg1)
         return
     end
     local job = _current_job_data

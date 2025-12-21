@@ -1,5 +1,6 @@
 local run = require('loop-debug.run')
 local breakpoints = require('loop-debug.dap.breakpoints')
+local watchexpr = require('loop-debug.watchexpr')
 
 ---@type loop.TaskProvider
 local task_provider =
@@ -7,11 +8,13 @@ local task_provider =
     get_state = function()
         local state = {}
         state.breakpoints = breakpoints.get_breakpoints()
+        state.watchexpr = watchexpr.get()
         return state
     end,
     on_project_loaded = function(proj_dir, state)
         if state.breakpoints then
             breakpoints.set_breakpoints(state.breakpoints)
+            watchexpr.set(state.watchexpr or {})
         end
     end,
     get_config_schema = function()

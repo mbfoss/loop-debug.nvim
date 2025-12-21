@@ -1,12 +1,12 @@
-local class = require('loop.tools.class')
-local ItemTreeComp = require('loop.comp.ItemTree')
-local strtools = require('loop.tools.strtools')
+local class             = require('loop.tools.class')
+local ItemTreeComp      = require('loop.comp.ItemTree')
+local strtools          = require('loop.tools.strtools')
 
 ---@alias loopdebug.comp.VarWatch.Item loop.comp.ItemTree.Item
 
 ---@class loopdebug.comp.VarWatch : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.VarWatch, name:string): loopdebug.comp.VarWatch
-local VarWatch = class(ItemTreeComp)
+local VarWatch          = class(ItemTreeComp)
 
 local _vartype_to_group = {
     -- primitives
@@ -198,7 +198,7 @@ function VarWatch:_load_variables(data_provider, ref, parent_id, callback)
                     ---@type loopdebug.comp.Variables.Item
                     local var_item = {
                         id = item_id,
-                        parent = parent_id,
+                        parent_id = parent_id,
                         expanded = self._layout_cache[item_id],
                         data = {
                             name = var.name,
@@ -234,7 +234,7 @@ function VarWatch:_load_expr_value(expr)
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = expr,
-        parent = nil,
+        parent_id = nil,
         expanded = self._layout_cache[expr],
         data = { is_expr = true, name = expr }
     }
