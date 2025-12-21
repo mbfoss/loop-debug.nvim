@@ -27,6 +27,8 @@ local M               = {}
 
 ---@class loop.debugui.DebugJobData
 ---@field jobname string
+---@field job_ended boolean|nil
+---@field job_success boolean|nil
 ---@field page_manager loop.PageManager
 ---@field current_session_id number|nil
 ---@field session_data table<number,loop.debugui.SessionData>
@@ -115,6 +117,22 @@ end
 
 ---@param jobdata loop.debugui.DebugJobData
 local function _refresh_task_page(jobdata)
+    if jobdata.job_ended then
+        --@type loop.pages.ItemListPage.Item
+        local item = {
+            id = 0,
+            ---@class loop.debugui.TaskPageItemData
+            data = {
+                label = jobdata.job_success and "Task ended" or "Task failed",
+                nb_paused_threads = 0,
+            }
+        }
+        local symbols = config.current.symbols
+        jobdata.task_list_comp:set_items({ item })
+        jobdata.task_list_comp:set_ui_flags(jobdata.job_success and symbols.success or symbols.failure)
+        return
+    end
+
     local session_ids = vim.tbl_keys(jobdata.session_data)
     vim.fn.sort(session_ids)
 
@@ -459,8 +477,10 @@ function M.track_new_debugjob(task_name, page_manager)
 
     local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
     local watch_page = page_manager.add_page_group(_page_groups.watch, "Watch").add_page(_page_groups.watch, "Watch")
-    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables, "Variables")
-    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack, "Call Stack")
+    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables,
+        "Variables")
+    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack,
+        "Call Stack")
 
     tasklist_comp:link_to_page(tasks_page)
     varwatch_comp:link_to_page(watch_page)
@@ -525,6 +545,9 @@ function M.track_new_debugjob(task_name, page_manager)
         end,
 
         on_exit = function(code)
+            jobdata.job_ended = true
+            jobdata.job_success = (code == 0)
+            _refresh_task_page(jobdata)
             _current_job_data = nil
             debugmode.command_function = nil
             debugmode.disable_debug_mode()

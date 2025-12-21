@@ -22,6 +22,8 @@ local DEFAULT_CONFIG = {
     symbols = {
         running = "▶",
         paused  = "⏸",
+        success = "✓",
+        failure = "✗",
     },
     debuggers = require("loop-debug.debuggers")
 }

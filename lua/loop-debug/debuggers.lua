@@ -150,7 +150,7 @@ debuggers.lldb = {
     attach_args = function(context)
         local task = context.task
         return {
-            pid = task.pid,
+            pid = tonumber(task.pid),
             program = get_task_program(context.task) or task.program,
         }
     end,
@@ -458,7 +458,7 @@ debuggers.netcoredbg = { -- renamed key to match common usage (was "csharp")
         return {
             type = "coreclr",
             request = "attach",
-            processId = task.processId or "${select-pid}",
+            processId = tonumber(task.processId),
         }
     end,
 }
