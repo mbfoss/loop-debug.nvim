@@ -129,7 +129,7 @@ local function _refresh_task_page(jobdata)
         }
         local symbols = config.current.symbols
         jobdata.task_list_comp:set_items({ item })
-        jobdata.task_list_comp:set_ui_flags(jobdata.job_success and symbols.success or symbols.failure)
+        jobdata.task_list_comp:set_ui_flags(jobdata.job_success and '' or symbols.failure)
         return
     end
 
