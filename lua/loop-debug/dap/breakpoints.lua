@@ -1,4 +1,3 @@
-local json     = require('loop.tools.json')
 local Trackers = require("loop.tools.Trackers")
 
 local M        = {}
@@ -186,23 +185,20 @@ function M.clear_all_breakpoints()
     _clear_breakpoints()
 end
 
---- Load breakpoints from a JSON file in the given project config directory.
----@param proj_config_dir string Path to project config directory
----@return boolean success True on success
----@return string|nil errmsg Optional error message
-function M.load_breakpoints(proj_config_dir)
-    assert(proj_config_dir and type(proj_config_dir) == 'string')
-    local breakpoints_file = vim.fs.joinpath(proj_config_dir, 'breakpoints.json')
-
-    local loaded, data = json.load_from_file(breakpoints_file)
-    if not loaded or type(data) ~= "table" then
-        return false, data
+---@return loopdebug.SourceBreakpoint[]
+function M.get_breakpoints()
+    ---@type loopdebug.SourceBreakpoint[]
+    local bpts = {}
+    for _, bp in pairs(_by_id) do
+        table.insert(bpts, bp)
     end
+    return bpts
+end
 
+---@param breakpoints loopdebug.SourceBreakpoint[]
+function M.set_breakpoints(breakpoints)
     _clear_breakpoints()
 
-    ---@type loopdebug.SourceBreakpoint[]
-    local breakpoints = data
     table.sort(breakpoints, function(a, b)
         if a.file ~= b.file then return a.file < b.file end
         return a.line < b.line
@@ -217,44 +213,9 @@ function M.load_breakpoints(proj_config_dir)
     return true, nil
 end
 
---- Save all breakpoints to a JSON file in the given project config directory.
----@param proj_config_dir string Path to project config directory
----@return boolean success True if saved or no save needed
----@return string|nil errmsg Optional error message
-function M.save_breakpoints(proj_config_dir)
-    if not _need_saving then
-        return true
-    end
-    if type(proj_config_dir) ~= 'string' or vim.fn.isdirectory(proj_config_dir) == 0 then
-        return false, "Invalid argument"
-    end
-
-    local data = vim.tbl_values(_by_id)
-
-    local breakpoints_file = vim.fs.joinpath(proj_config_dir, 'breakpoints.json')
-    local ok, err = json.save_to_file(breakpoints_file, data)
-    if not ok then
-        return false, err
-    end
-
-    _need_saving = false
-    return true
-end
-
 ---@return boolean
 function M.have_breakpoints()
     return next(_by_id) ~= nil
-end
-
----@return number[]
-function M.get_ids()
-    return vim.tbl_keys(_by_id)
-end
-
----@param id number
----@return loopdebug.SourceBreakpoint
-function M.get_breakpoint(id)
-    return _by_id[id]
 end
 
 ---@param handler fun(bp:loopdebug.SourceBreakpoint)

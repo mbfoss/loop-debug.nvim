@@ -1,23 +1,13 @@
 local signs             = require('loop-debug.signs')
 local dapbreakpoints    = require('loop-debug.dap.breakpoints')
-local Trackers          = require('loop.tools.Trackers')
 local selector          = require("loop.tools.selector")
 local projinfo          = require("loop.projinfo")
 local uitools           = require("loop.tools.uitools")
 
 local M                 = {}
 
-local _init_done       = false
-local _init_err_msg    = "init() not called"
-
----@class loop.debugui.Tracker
----@field on_bp_added fun(bp:loopdebug.SourceBreakpoint, verified:boolean)|nil
----@field on_bp_removed fun(bp:loopdebug.SourceBreakpoint)|nil
----@field on_all_bp_removed fun(bpts:loopdebug.SourceBreakpoint[])|nil
----@field on_bp_state_update fun(bp:loopdebug.SourceBreakpoint, verified:boolean)
-
----@type loop.tools.Trackers<loop.debugui.Tracker>
-local _trackers = Trackers:new()
+local _init_done        = false
+local _init_err_msg     = "init() not called"
 
 ---@class loop.debug_ui.Breakpointata
 ---@field breakpoint loopdebug.SourceBreakpoint
@@ -61,7 +51,6 @@ local function _refresh_breakpoint_sign(id, data)
     local verified = _get_breakpoint_state(data)
     local sign = _get_breakpoint_sign(data.breakpoint, verified)
     signs.place_file_sign(id, data.breakpoint.file, data.breakpoint.line, "breakpoints", sign)
-    _trackers:invoke("on_bp_state_update", data.breakpoint, verified)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
@@ -71,14 +60,12 @@ local function _on_breakpoint_added(bp)
     }
     local sign = _get_breakpoint_sign(bp, true)
     signs.place_file_sign(bp.id, bp.file, bp.line, "breakpoints", sign)
-    _trackers:invoke("on_bp_added", bp, true)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
 local function _on_breakpoint_removed(bp)
     _breakpoints_data[bp.id] = nil
     signs.remove_file_sign(bp.id, "breakpoints")
-    _trackers:invoke("on_bp_removed", bp)
 end
 
 ---@param removed loopdebug.SourceBreakpoint[]
@@ -91,7 +78,6 @@ local function _on_all_breakpoints_removed(removed)
     for file, _ in pairs(files) do
         signs.remove_file_signs(file, "breakpoints")
     end
-    _trackers:invoke("on_all_bp_removed", removed)
 end
 
 ---@param task_name string -- task name
