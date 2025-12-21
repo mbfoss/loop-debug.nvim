@@ -5,6 +5,7 @@ local Trackers = require("loop.tools.Trackers")
 ---@alias loop.job.DebugJob.Command
 ---|"session"
 ---|"thread"
+---|"frame"
 ---|"continue"
 ---|"step_in"
 ---|"step_out"

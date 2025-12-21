@@ -23,17 +23,6 @@ local function _item_formatter(item, highlights)
     local parts = {}
     local pos = 0
 
-    -- frame ID
-    local id_str = tostring(frame.id)
-    table.insert(parts, id_str)
-    table.insert(hls, { group = "Identifier", start_col = pos, end_col = pos + #id_str })
-    pos = pos + #id_str
-
-    -- separator ": "
-    local sep1 = ": "
-    table.insert(parts, sep1)
-    pos = pos + #sep1
-
     -- function name
     local name_str = tostring(frame.name)
     table.insert(parts, name_str)
@@ -118,13 +107,14 @@ end
 
 ---@param data loopdebug.session.DataProviders
 ---@param thread_id number
-function StackTrace:set_content(data, thread_id)
+---@param thread_name string|nil
+function StackTrace:set_content(data, thread_id, thread_name)
     data.stack_provider({
             threadId = thread_id,
             levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
-            local text = "Thread " .. tostring(thread_id)
+            local text = "Thread: " ..(thread_name or tostring(thread_id))
             local items = { {
                 id = 0,
                 data = { text = text, thread_data = data }

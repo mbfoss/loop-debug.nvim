@@ -20,6 +20,7 @@ local M               = {}
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
 ---@field paused_threads table<number,boolean>
+---@field thread_names table<number,string>
 ---@field cur_thread_id number|nil
 ---@field top_frame loopdebug.proto.StackFrame|nil
 ---@field adapter_output_comp loop.comp.OutputLines|nil
@@ -89,16 +90,16 @@ end
 ---@param jobdata loop.debugui.DebugJobData
 ---@param sess_id number
 ---@param thread_id number
----@param force boolean
-local function _switch_to_thread(jobdata, sess_id, thread_id, force)
-    local session_data = jobdata.session_data[sess_id]
-    if not session_data then return end
-    if thread_id == session_data.cur_thread_id and not force then return end
+local function _switch_to_thread(jobdata, sess_id, thread_id)
+    if not sess_id or not thread_id then return end
+    
+    local sess_data = jobdata.session_data[sess_id]
+    if not sess_data then return end
 
-    session_data.cur_thread_id = thread_id
-    session_data.top_frame = nil
+    sess_data.cur_thread_id = thread_id
+    sess_data.top_frame = nil
 
-    local data_providers = session_data.data_providers
+    local data_providers = sess_data.data_providers
 
     local topframe
     -- handle current frame
@@ -107,12 +108,16 @@ local function _switch_to_thread(jobdata, sess_id, thread_id, force)
         topframe = data and data.stackFrames[1] or nil
         if topframe and topframe.source and topframe.source.path then
             --- check if it did not change meanwhile
-            if sess_id == jobdata.current_session_id and thread_id == session_data.cur_thread_id then
-                session_data.top_frame = topframe
+            if sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
+                sess_data.top_frame = topframe
                 _switch_to_frame(jobdata, topframe)
             end
         end
     end)
+
+    local thread_name = sess_data.thread_names[thread_id]
+    jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id, thread_name)
+
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -171,39 +176,44 @@ end
 
 ---@param jobdata loop.debugui.DebugJobData
 ---@param sess_id number
----@param force boolean
 ---@param thread_pause_evt? loopdebug.session.notify.ThreadsEventScope|nil
-local function _switch_to_session(jobdata, sess_id, force, thread_pause_evt)
-    if sess_id == jobdata.current_session_id and not force then return end
+local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
+    
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
-    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or nil
+    jobdata.current_session_id = sess_id
+
+    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
     if not thread_id then return end
 
     if thread_pause_evt then
-        sess_data.paused_threads[thread_pause_evt.thread_id] = true
-        if thread_pause_evt.all_thread then
-            sess_data.data_providers.threads_provider(function(err, resp)
-                if err or not resp or not resp.threads then
-                    notifications.notify("Failed to load thread list - " .. (err or ""))
-                else
+        if not thread_pause_evt.all_thread then
+            sess_data.paused_threads[thread_pause_evt.thread_id] = true
+            _refresh_task_page(jobdata)
+        end
+        sess_data.data_providers.threads_provider(function(err, resp)
+            if err or not resp or not resp.threads then
+                notifications.notify("Failed to load thread list - " .. (err or ""))
+            elseif sess_id == jobdata.current_session_id then
+                if thread_pause_evt.all_thread then
                     sess_data.paused_threads = {}
                     for _, thread in pairs(resp.threads) do
                         sess_data.paused_threads[thread.id] = true
                     end
                     _refresh_task_page(jobdata)
                 end
-            end)
-        end
+                sess_data.thread_names = {}
+                for _, thread in pairs(resp.threads) do
+                    sess_data.thread_names[thread_id] = thread.name
+                end
+                _switch_to_thread(jobdata, sess_id, thread_id)
+            end
+        end)
+    else
+        _refresh_task_page(jobdata)
+        _switch_to_thread(jobdata, sess_id, thread_id)
     end
-
-    jobdata.current_session_id = sess_id
-    _refresh_task_page(jobdata)
-
-    _switch_to_thread(jobdata, sess_id, thread_id, force)
-
-    jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -219,7 +229,8 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
         sess_name = sess_name,
         controller = controller,
         data_providers = data_providers,
-        paused_threads = {}
+        paused_threads = {},
+        thread_names = {}
     }
     jobdata.session_data[sess_id] = session_data
     _refresh_task_page(jobdata)
@@ -234,37 +245,134 @@ local function _on_session_removed(jobdata, sess_id, sess_name)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_continue_all_command(jobdata)
+    for _, session_data in pairs(jobdata.session_data) do
+        if session_data.cur_thread_id then
+            session_data.controller.continue(session_data.cur_thread_id, true)
+        end
+    end
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_terminate_all_command(jobdata)
+    for _, session_data in pairs(jobdata.session_data) do
+        if session_data.cur_thread_id then
+            session_data.controller.continue(session_data.cur_thread_id, true)
+        end
+    end
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_select_session_command(jobdata)
+    local choices = {}
+    for sess_id, sess_data in pairs(jobdata.session_data) do
+        ---@type loop.SelectorItem
+        local item = { label = sess_data.sess_name, data = sess_id }
+        table.insert(choices, item)
+    end
+    selector.select("Select debug session", choices, nil, function(sess_id)
+        if sess_id then
+            _switch_to_session(jobdata, sess_id)
+        end
+    end)
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_select_thread_command(jobdata)
+    local sess_id = jobdata.current_session_id
+
+    ---@type loop.debugui.SessionData|nil
+    local sess_data = sess_id and jobdata.session_data[sess_id] or nil
+    if not sess_id or not sess_data then
+        return false, "No active debug session"
+    end
+
+    sess_data.data_providers.threads_provider(function(err, data)
+        if err or not data or not data.threads then
+            notifications.notify("Failed to load thread list - " .. (err or ""))
+        elseif sess_id == jobdata.current_session_id then
+            local choices = {}
+            for _, thread in pairs(data.threads) do
+                ---@type loop.SelectorItem
+                local item = { label = tostring(thread.id) .. ": " .. tostring(thread.name), data = thread.id }
+                table.insert(choices, item)
+            end
+            selector.select("Select thread", choices, nil, function(thread_id)
+                -- ensure session did not change meanwhile
+                if thread_id and sess_id == jobdata.current_session_id then
+                    _switch_to_thread(jobdata, sess_id, thread_id)
+                end
+            end)
+        end
+    end)
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_select_frame_command(jobdata)
+    local sess_id = jobdata.current_session_id
+
+    ---@type loop.debugui.SessionData|nil
+    local sess_data = sess_id and jobdata.session_data[sess_id] or nil
+    if not sess_id or not sess_data then
+        return false, "No active debug session"
+    end
+
+    local thread_id = sess_data.cur_thread_id
+    if not thread_id then
+        return false, "No selected thread"
+    end
+
+    sess_data.data_providers.stack_provider({ threadId = sess_data.cur_thread_id }, function(err, data)
+        if err or not data then
+            notifications.notify("Failed to load call stack - " .. (err or ""))
+        elseif sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
+            local choices = {}
+            for _, frame in pairs(data.stackFrames) do
+                ---@type loop.SelectorItem
+                local item = { label = tostring(frame.name), data = frame }
+                table.insert(choices, item)
+            end
+            selector.select("Select frame", choices, nil, function(frame)
+                -- ensure if's still the same session and thread
+                if frame and sess_id == jobdata.current_session_id
+                    and thread_id == sess_data.cur_thread_id then
+                    _switch_to_frame(jobdata, frame)
+                end
+            end)
+        end
+    end)
+
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
 ---@param command loop.job.DebugJob.Command
 ---@return boolean
 ---@return string|nil
 local function _on_debug_command(jobdata, command)
-    if command == 'continue_all' or command == "terminate_all" then
-        local is_continue = command == 'continue_all'
-        for _, session_data in pairs(jobdata.session_data) do
-            if is_continue then
-                if session_data.cur_thread_id then
-                    session_data.controller.continue(session_data.cur_thread_id, true)
-                end
-            else
-                session_data.controller.terminate()
-            end
-        end
-        return true
+    if command == 'continue_all' then
+        return _process_continue_all_command(jobdata)
     end
-
+    if command == 'terminate_all' then
+        return _process_terminate_all_command(jobdata)
+    end
     if command == "session" then
-        local choices = {}
-        for sess_id, sess_data in pairs(jobdata.session_data) do
-            ---@type loop.SelectorItem
-            local item = { label = sess_data.sess_name, data = sess_id }
-            table.insert(choices, item)
-        end
-        selector.select("Select debug session", choices, nil, function(sess_id)
-            if sess_id and sess_id ~= jobdata.current_session_id then
-                _switch_to_session(jobdata, sess_id, false)
-            end
-        end)
-        return true
+        return _process_select_session_command(jobdata)
+    end
+    if command == "thread" then
+        return _process_select_thread_command(jobdata)
+    end
+    if command == "frame" then
+        return _process_select_frame_command(jobdata)
     end
 
     local sess_id = jobdata.current_session_id
@@ -274,48 +382,16 @@ local function _on_debug_command(jobdata, command)
         return false, "No active debug session"
     end
 
-    if command == "thread" then
-        sess_data.data_providers.threads_provider(function(err, data)
-            if err or not data or not data.threads then
-                notifications.notify("Failed to load thread list - " .. (err or ""))
-            else
-                local choices = {}
-                for _, thread in pairs(data.threads) do
-                    ---@type loop.SelectorItem
-                    local item = { label = tostring(thread.id) .. ": " .. tostring(thread.name), data = thread.id }
-                    table.insert(choices, item)
-                end
-                selector.select("Select thread", choices, nil, function(thread_id)
-                    -- check if still the same session
-                    if sess_id == jobdata.current_session_id then
-                        _switch_to_thread(jobdata, sess_id, thread_id, false)
-                    end
-                end)
-            end
-        end)
-        return true
-    end
-
-    local controller = sess_data.controller
-    if command == "terminate" then
-        controller.terminate()
-        return true
-    end
-
-    if sess_data.cur_thread_id == nil then
-        return false, "No paused threads"
-    end
-
     if command == 'continue' then
-        controller.continue(sess_data.cur_thread_id, true)
+        sess_data.controller.continue(sess_data.cur_thread_id, true)
     elseif command == "step_in" then
-        controller.step_in(sess_data.cur_thread_id)
+        sess_data.controller.step_in(sess_data.cur_thread_id)
     elseif command == "step_out" then
-        controller.step_out(sess_data.cur_thread_id)
+        sess_data.controller.step_out(sess_data.cur_thread_id)
     elseif command == "step_over" then
-        controller.step_over(sess_data.cur_thread_id)
+        sess_data.controller.step_over(sess_data.cur_thread_id)
     elseif command == "step_back" then
-        controller.step_back(sess_data.cur_thread_id)
+        sess_data.controller.step_back(sess_data.cur_thread_id)
     else
         return false, "Invalid debug command: " .. tostring(command)
     end
@@ -435,7 +511,7 @@ local function _on_session_thread_pause(jobdata, sess_id, sess_name, event_data)
         notifications.notify("Unexpected session pause event")
         return
     end
-    _switch_to_session(jobdata, sess_id, true, event_data)
+    _switch_to_session(jobdata, sess_id, event_data)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
@@ -509,7 +585,7 @@ function M.track_new_debugjob(task_name, page_manager)
     tasklist_comp:add_tracker({
         on_selection = function(item)
             if item then
-                _switch_to_session(jobdata, item.id, false)
+                _switch_to_session(jobdata, item.id)
             end
         end
     })
