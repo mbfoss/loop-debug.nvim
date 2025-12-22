@@ -178,7 +178,8 @@ local function _open_value_floatwin(id, data)
     end
     local hint = data.presentationHint
     local value = data.value and tostring(data.value) or ""
-    floatwin.open_central_float(daptools.format_variable(value, hint))
+    local title = data.name or "value"
+    floatwin.open_inspect_win(title, daptools.format_variable(value, hint))
 end
 
 ---@param data_providers loopdebug.session.DataProviders

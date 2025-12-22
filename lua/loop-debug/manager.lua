@@ -383,7 +383,7 @@ local function _process_inspect_var_command(jobdata)
     local dbgtools = require('loop-debug.tools.dbgtools')
     local expr, expr_err = dbgtools.get_identifier_under_cursor()
     if not expr then
-        return false, expr_err or "No expression at the cursor location"
+        return false, expr_err or "No variable at the cursor location"
     end
     local frame = sess_data.top_frame -- TODO: implement a current frame system
     sess_data.data_providers.evaluate_provider({
@@ -392,10 +392,10 @@ local function _process_inspect_var_command(jobdata)
         frameId = frame and frame.id or nil
     }, function(err, data)
         if data and data.result then
-            floatwin.open_central_float(expr, daptools.format_variable(data.result, data.presentationHint))
+            floatwin.open_inspect_win(expr, daptools.format_variable(data.result, data.presentationHint))
         else
             err = err or "not available"
-            floatwin.open_central_float("Error", err)
+            floatwin.open_inspect_win("Error", err)
         end
     end)
     return true
