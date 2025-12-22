@@ -107,6 +107,11 @@ end
 local function _variable_node_formatter(id, data, highlights)
     ---@type loopdebug.proto.VariablePresentationHint|nil
     local hint = data.presentationHint
+    if data.is_na and not data.name then
+        table.insert(highlights, { group = "NonText" })
+        return "not available"
+    end
+    local name = data.name or "unknown"
     if not data then return "" end
     if data.scopelabel then
         table.insert(highlights, { group = "Directory" })
@@ -115,12 +120,12 @@ local function _variable_node_formatter(id, data, highlights)
     if data.greyout then
         table.insert(highlights, { group = "NonText" })
     else
-        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #data.name })
+        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
         if data.is_na then
-            table.insert(highlights, { group = "NonText", start_col = #data.name + 2 })
+            table.insert(highlights, { group = "NonText", start_col = #name + 2 })
         else
             local kind = hint and hint.kind or nil
-            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #data.name + 1 })
+            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #name + 1 })
         end
     end
     local value = data.value or ""
@@ -131,7 +136,6 @@ local function _variable_node_formatter(id, data, highlights)
             :gsub("\\n", "\n")
             :gsub("\\t", "\t")
     end
-    local name = tostring(data.name)
     if value:find("\n", 1, true) then
         return name .. ":\n" .. value
     end
@@ -176,7 +180,9 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
                 local var_item = {
                     id = {}, -- a unique id
                     parent_id = parent_id,
-                    data = { is_na = true },
+                    data = { 
+                        is_na = true 
+                    },
                 }
                 table.insert(children, var_item)
             end

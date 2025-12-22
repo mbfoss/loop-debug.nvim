@@ -132,52 +132,49 @@ function M.select_command()
     ------------------------------------------------------------------
     -- Top-level debug commands
     ------------------------------------------------------------------
-
     local debug_cmds = {
-        breakpoint = "Breakpoint operations",
-        session = "Show debug session info",
-        thread = "Select debug thread",
-        frame = "Select stack frame",
-        continue = "Continue execution",
-        step_in = "Step into",
-        step_out = "Step out",
-        step_over = "Step over",
-        step_back = "Step back",
-        terminate = "Terminate debug session",
-        continue_all = "Continue all sessions",
-        terminate_all = "Terminate all sessions",
-        debug_mode = "Toggle debug mode",
+        { "debug_mode",    "Toggle debug mode" },
+        { "continue",      "Continue execution" },
+        { "continue_all",  "Continue all sessions" },
+        { "step_in",       "Step into" },
+        { "step_out",      "Step out" },
+        { "step_over",     "Step over" },
+        { "step_back",     "Step back" },
+        { "breakpoint",    "Breakpoint operations" },
+        { "session",       "Show debug session info" },
+        { "thread",        "Select debug thread" },
+        { "frame",         "Select stack frame" },
+        { "terminate",     "Terminate debug session" },
+        { "terminate_all", "Terminate all sessions" },
     }
 
-    for subcmd, help in pairs(debug_cmds) do
+    for _, cmd in ipairs(debug_cmds) do
         table.insert(all_cmds, {
-            vimcmd = "LoopDebug " .. subcmd,
-            help = help,
+            vimcmd = "LoopDebug " .. cmd[1],
+            help = cmd[2],
         })
     end
 
     ------------------------------------------------------------------
     -- Breakpoint subcommands
     ------------------------------------------------------------------
-
     local breakpoint_cmds = {
-        list = "List breakpoints",
-        toggle = "Toggle breakpoint",
-        logpoint = "Toggle logpoint",
-        clear_file = "Clear breakpoints in file",
-        clear_all = "Clear all breakpoints",
+        { "list",       "List breakpoints" },
+        { "toggle",     "Toggle breakpoint" },
+        { "logpoint",   "Toggle logpoint" },
+        { "clear_file", "Clear breakpoints in file" },
+        { "clear_all",  "Clear all breakpoints" },
     }
 
-    for subcmd, help in pairs(breakpoint_cmds) do
+    for _, cmd in ipairs(breakpoint_cmds) do
         table.insert(all_cmds, {
-            vimcmd = "LoopDebug breakpoint " .. subcmd,
-            help = help,
+            vimcmd = "LoopDebug breakpoint " .. cmd[1],
+            help = cmd[2],
         })
     end
 
     require("loop.tools.cmdmenu").select_and_run_command(all_cmds)
 end
-
 
 -----------------------------------------------------------
 -- Dispatcher

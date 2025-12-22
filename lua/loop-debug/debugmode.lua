@@ -9,6 +9,7 @@ M.command_function = nil
 
 local _debug_mode_on
 local _last_hl_bufnr
+local _next_winleave_ok = false
 
 local saved = {
     original_maps = nil, -- only h/j/k/l
@@ -29,6 +30,11 @@ function M.is_active()
     return _debug_mode_on
 end
 
+---@param ok boolean
+function M.next_winleave_ok(ok)
+    _next_winleave_ok = ok
+end
+
 local function _clear_highlight(bufnr)
     if bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
         vim.api.nvim_buf_clear_namespace(bufnr, _debug_mode_line_hl, 0, -1)
@@ -36,13 +42,12 @@ local function _clear_highlight(bufnr)
 end
 
 ---@param line? number Line to highlight (1-indexed)
----@param hl? string? Highlight group, defaults to "VisualNOS"
 ---@param bufnr? number Buffer number, default: current
-function M.highlight_line(line, hl, bufnr)
+function M.highlight_line(line, bufnr)
     if not _debug_mode_on then return end
 
     bufnr = bufnr or vim.api.nvim_get_current_buf()
-    hl = hl or "Underlined"
+    local hl = "Visual"
 
     _clear_highlight(_last_hl_bufnr)
     _last_hl_bufnr = bufnr
@@ -64,10 +69,10 @@ function M.enable_debug_mode()
         return
     end
 
-    vim.schedule(function ()
-        vim.cmd.stopinsert()        
+    vim.schedule(function()
+        vim.cmd.stopinsert()
     end)
-    
+
     -- Save original scrolloff
     saved.scrolloff = vim.wo.scrolloff
     -- Force a nice scroll margin for debugging
@@ -99,10 +104,18 @@ function M.enable_debug_mode()
     vim.api.nvim_create_autocmd("WinLeave", {
         group = _debug_mode_detection,
         callback = function()
-            if _debug_mode_on then
+            if _debug_mode_on and not _next_winleave_ok then
                 M.disable_debug_mode()
-                notifications.notify("Debug mode OFF", vim.log.levels.INFO)
             end
+            _next_winleave_ok = false
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("ModeChanged", {
+        group = _debug_mode_detection, -- assign to our group
+        pattern = "n:*",  -- old mode is n, new can be anything
+        callback = function()
+            M.disable_debug_mode()
         end,
     })
 

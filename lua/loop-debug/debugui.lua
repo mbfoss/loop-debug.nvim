@@ -11,7 +11,7 @@ local notifications   = require('loop.notifications')
 local selector        = require('loop.tools.selector')
 local breakpoints_ui  = require('loop-debug.bpts_ui')
 
-local M            = {}
+local M               = {}
 
 ---@class loop.debugui.SessionData
 ---@field sess_name string|nil
@@ -40,7 +40,7 @@ local M            = {}
 ---@type loop.debugui.DebugJobData|nil
 local _current_job_data
 
-local _page_groups = {
+local _page_groups    = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -49,16 +49,33 @@ local _page_groups = {
     debugger = "debugger",
 }
 
+function _open_split_view(group1, group2)
+    if not group1 then return end
+    local loop_project = require('loop.project')
+    local win = vim.api.nvim_get_current_win()
+    do
+        vim.cmd("leftabove vsplit")
+        vim.cmd("vertical resize " .. math.floor(vim.o.columns / 3))
+        loop_project.open_page(group1)
+    end
+    if group2 then
+        vim.cmd("below split")
+        loop_project.open_page(group2)
+    end
+    vim.api.nvim_set_current_win(win)
+end
+
 ---@param frame loopdebug.proto.StackFrame
 function _jump_to_frame(frame)
     if not (frame and frame.source and frame.source.path) then return end
     if not filetools.file_exists(frame.source.path) then return end
 
     -- Open file and move cursor
+    debugmode.next_winleave_ok(true)
     local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
+    debugmode.next_winleave_ok(false)
 
-    -- Highlight the current frame line (full line, buffer-local)
-    debugmode.highlight_line(frame.line, "Underlined", bufnr)
+    debugmode.highlight_line(frame.line, bufnr)
 
     -- Place sign for current frame
     signs.place_file_sign(1, frame.source.path, frame.line, "currentframe", "currentframe")
@@ -553,6 +570,10 @@ function M.track_new_debugjob(task_name, page_manager)
     tasklist_comp:link_to_page(tasks_page)
     variables_comp:link_to_page(vars_page)
     stacktrace_comp:link_to_page(stack_page)
+
+    vim.schedule(function()
+        _open_split_view("Variables", "Call Stack")
+    end)
 
     ---@type loop.debugui.DebugJobData
     local jobdata = {
