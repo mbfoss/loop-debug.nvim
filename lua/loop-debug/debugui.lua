@@ -247,6 +247,10 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
         thread_names = {}
     }
     jobdata.session_data[sess_id] = session_data
+    if not jobdata.current_session_id then
+        -- first session
+        jobdata.current_session_id = sess_id
+    end
     _refresh_task_page(jobdata)
 end
 
@@ -436,7 +440,9 @@ local function _on_debug_command(jobdata, command)
         return false, "No active debug session"
     end
 
-    if command == 'continue' then
+    if command == 'pause' then
+        sess_data.controller.pause(sess_data.cur_thread_id or 0)
+    elseif command == 'continue' then
         sess_data.controller.continue(sess_data.cur_thread_id, true)
     elseif command == "step_in" then
         sess_data.controller.step_in(sess_data.cur_thread_id)

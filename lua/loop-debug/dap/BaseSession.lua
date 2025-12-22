@@ -63,9 +63,11 @@ function BaseSession:start(opts)
                     opts.on_stderr(text)
                 end)
             end),
-        on_exit    = function()
+        on_exit    = function(code, signal)
             vim.schedule(function() self:_on_exit() end)
-            vim.schedule(opts.on_exit)
+            vim.schedule(function ()
+                opts.on_exit(code, signal)
+            end)
         end,
     }
 

@@ -17,18 +17,19 @@ local daptools     = require('loop-debug.dap.daptools')
 ---@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
 local Variables    = class(ItemTreeComp)
 
----@param s string
+---@param str string
+---@param max_len number
 ---@return string preview
 ---@return boolean is_different
-local function _preview_string(s)
+local function _preview_string(str, max_len)
     -- check conditions for returning as-is
-    if #s < 50 and not s:find("\n", 1, true) then
-        return s, false
+    if #str < max_len and not str:find("\n", 1, true) then
+        return str, false
     end
     -- take first 50 characters
-    local preview = s:sub(1, 50)
+    local preview = str:sub(1, max_len)
     -- replace newlines with literal '\n'
-    preview = preview:gsub("\n", "\\n")
+    preview = preview:gsub("\n", " ")
     return preview, true
 end
 
@@ -137,11 +138,11 @@ local function _variable_node_formatter(id, data, highlights)
     local hint = data.presentationHint
     local name = data.name and tostring(data.name) or "unknown"
     local value = data.value and tostring(data.value) or ""
-    local preview, is_different = _preview_string(value)
+    value = daptools.format_variable(value, hint)
+    local preview, is_different = _preview_string(value, 30)
+    if is_different then preview = vim.fn.trim(preview, "", 2) end
     local text = name .. ": " .. preview
-    if is_different then
-        text = text .. "…"
-    end
+    if is_different then text = text .. "…" end
     if data.greyout then
         table.insert(highlights, { group = "NonText" })
     else

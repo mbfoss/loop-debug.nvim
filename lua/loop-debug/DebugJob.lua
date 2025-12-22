@@ -11,12 +11,14 @@ local Trackers = require("loop.tools.Trackers")
 ---|"step_out"
 ---|"step_over"
 ---|"terminate"
+---|"pause"
 ---|"continue_all"
 ---|"terminate_all"
 ---|"debug_mode"
 ---|"inspect"
 
 ---@class loop.job.DebugJob.SessionController
+---@field pause fun(thread_id: number)
 ---@field continue fun(thread_id: number, all_threads: boolean)
 ---@field step_in fun(thread_id: number)
 ---@field step_over fun(thread_id: number)
@@ -127,6 +129,7 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
 
     ---@type loop.job.DebugJob.SessionController
     local controller           = {
+        pause = function(thread_id) session:debug_pause(thread_id) end,
         continue = function(thread_id, all_threads) session:debug_continue(thread_id, all_threads) end,
         step_in = function(thread_id) session:debug_stepIn(thread_id) end,
         step_over = function(thread_id) session:debug_stepOver(thread_id) end,

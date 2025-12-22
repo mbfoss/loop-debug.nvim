@@ -372,6 +372,17 @@ function Session:state()
 end
 
 ---@param thread_id number
+function Session:debug_pause(thread_id)
+    assert(type(thread_id) == "number")
+    self._base_session:request_pause({ threadId = thread_id },
+        function(err, _)
+            if err then
+                self:_trace_notification("pause error: " .. tostring(err), "error")
+            end
+        end)
+end
+
+---@param thread_id number
 ---@param all_threads boolean
 function Session:debug_continue(thread_id, all_threads)
     assert(type(thread_id) == "number")
