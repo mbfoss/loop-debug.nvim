@@ -1,6 +1,6 @@
 local M = {}
 
-local debug_win_augroup = vim.api.nvim_create_augroup("LoopDebugCentralModal", { clear = true })
+local debug_win_augroup = vim.api.nvim_create_augroup("LoopDebugPluginModalWin", { clear = true })
 local _current_win = nil
 
 ---@param text string

@@ -77,6 +77,8 @@ function M.init()
         vim.keymap.set("n", "<leader>ds", ":LoopDebug session<CR>", { desc = "Select debug session", silent = true })
         vim.keymap.set("n", "<leader>dt", ":LoopDebug thread<CR>", { desc = "Select thread", silent = true })
         vim.keymap.set("n", "<leader>df", ":LoopDebug frame<CR>", { desc = "Select stack frame", silent = true })
+        vim.keymap.set("n", "<leader>di", ":LoopDebug inspect<CR>",
+            { desc = "Inspect value under the cursor", silent = true })
         vim.keymap.set("n", "<leader>dc", ":LoopDebug continue<CR>", { desc = "Continue paused session", silent = true })
         vim.keymap.set("n", "<leader>dC", ":LoopDebug continue_all<CR>",
             { desc = "Continue all paused sesions", silent = true })
@@ -90,7 +92,7 @@ end
 -----------------------------------------------------------
 local function _debug_commands()
     return { "breakpoint", "session", "thread", "frame",
-        "continue", "step_in", "step_out", "step_over",
+        "inspect", "continue", "step_in", "step_out", "step_over",
         "step_back", "terminate", "continue_all", "terminate_all", "debug_mode" }
 end
 
@@ -134,16 +136,17 @@ function M.select_command()
     ------------------------------------------------------------------
     local debug_cmds = {
         { "debug_mode",    "Toggle debug mode" },
-        { "continue",      "Continue execution" },
-        { "continue_all",  "Continue all sessions" },
-        { "step_in",       "Step into" },
-        { "step_out",      "Step out" },
-        { "step_over",     "Step over" },
-        { "step_back",     "Step back" },
         { "breakpoint",    "Breakpoint operations" },
         { "session",       "Show debug session info" },
         { "thread",        "Select debug thread" },
         { "frame",         "Select stack frame" },
+        { "inspect",       "Inspect variable at the cursor location" },
+        { "step_in",       "Step into" },
+        { "step_out",      "Step out" },
+        { "step_over",     "Step over" },
+        { "step_back",     "Step back" },
+        { "continue",      "Continue execution" },
+        { "continue_all",  "Continue all sessions" },
         { "terminate",     "Terminate debug session" },
         { "terminate_all", "Terminate all sessions" },
     }

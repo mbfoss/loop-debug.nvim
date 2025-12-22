@@ -2,7 +2,8 @@ local class        = require('loop.tools.class')
 local ItemTreeComp = require('loop.comp.ItemTree')
 local strtools     = require('loop.tools.strtools')
 local watchexpr    = require('loop-debug.watchexpr')
-local floatwin    = require('loop-debug.tools.floatwin')
+local floatwin     = require('loop-debug.tools.floatwin')
+local daptools     = require('loop-debug.dap.daptools')
 
 ---@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
 
@@ -149,16 +150,16 @@ local function _variable_node_formatter(id, data, highlights)
             table.insert(highlights, { group = "NonText", start_col = #name })
         else
             local start_col = #name
-            local end_col = 2
-            table.insert(highlights, { group = "NonText", start_col = start_pos, end_col = end_col })
-            start_pos = end_col
-            end_col = start_pos + #preview
+            local end_col = start_col + 2
+            table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
+            start_col = end_col
+            end_col = start_col + #preview
             local kind = hint and hint.kind or nil
-            table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_pos, end_col = end_col })
+            table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_col, end_col = end_col })
             if is_different then
-                start_pos = end_col
-                end_col = start_pos + 1
-                table.insert(highlights, { group = "NonText", start_col = start_pos, end_col = end_col })
+                start_col = end_col
+                end_col = start_col + 1
+                table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
             end
         end
     end
@@ -168,23 +169,15 @@ end
 ---@param id any
 ---@param data any
 local function _open_value_floatwin(id, data)
-    if data.is_na  then
+    if data.is_na then
         return
     end
     if data.scopelabel then
         return
     end
-    ---@type loopdebug.proto.VariablePresentationHint|nil
     local hint = data.presentationHint
     local value = data.value and tostring(data.value) or ""
-    if hint and hint.attributes and vim.list_contains(hint.attributes, "rawString") then
-        -- unwrap quotes and decode escape sequences
-        value = value
-            :gsub("^(['\"])(.*)%1$", "%2")
-            :gsub("\\n", "\n")
-            :gsub("\\t", "\t")
-    end
-    floatwin.open_central_float(value)
+    floatwin.open_central_float(daptools.format_variable(value, hint))
 end
 
 ---@param data_providers loopdebug.session.DataProviders
@@ -299,7 +292,7 @@ function Variables:init()
         on_toggle = function(id, data, expanded)
             self._layout_cache[id] = expanded
         end,
-        on_open = function (id, data)
+        on_open = function(id, data)
             _open_value_floatwin(id, data)
         end
     })

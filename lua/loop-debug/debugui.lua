@@ -10,6 +10,8 @@ local uitools         = require('loop.tools.uitools')
 local notifications   = require('loop.notifications')
 local selector        = require('loop.tools.selector')
 local breakpoints_ui  = require('loop-debug.bpts_ui')
+local floatwin        = require('loop-debug.tools.floatwin')
+local daptools        = require('loop-debug.dap.daptools')
 
 local M               = {}
 
@@ -367,6 +369,43 @@ local function _process_select_frame_command(jobdata)
 end
 
 ---@param jobdata loop.debugui.DebugJobData
+---@return boolean, string|nil
+local function _process_inspect_var_command(jobdata)
+    local sess_id = jobdata.current_session_id
+    ---@type loop.debugui.SessionData|nil
+    local sess_data = sess_id and jobdata.session_data[sess_id] or nil
+    if not sess_id or not sess_data then
+        return false, "No active debug session"
+    end
+
+    local thread_id = sess_data.cur_thread_id
+    if not thread_id then
+        return false, "No selected thread"
+    end
+
+    local dbgtools = require('loop-debug.tools.dbgtools')
+    local expr = dbgtools.get_expression_user_cursor()
+    if not expr then
+        return false, "No expression at the cursor location"
+    end
+    local frame = sess_data.top_frame -- TODO: implement a current frame system
+    sess_data.data_providers.evaluate_provider({
+        expression = expr,
+        context = "watch",
+        frameId = frame and frame.id or nil
+    }, function(err, data)
+        -- TODO: implement a timeout mechanism for all rquests
+        -- and use here to avoid delayed replies
+        if data and data.result then
+            floatwin.open_central_float(daptools.format_variable(data.result, data.presentationHint))
+        else
+            vim.notify("Failed to read variable " .. tostring(err))
+        end
+    end)
+    return true
+end
+
+---@param jobdata loop.debugui.DebugJobData
 ---@param command loop.job.DebugJob.Command
 ---@return boolean
 ---@return string|nil
@@ -385,6 +424,9 @@ local function _on_debug_command(jobdata, command)
     end
     if command == "frame" then
         return _process_select_frame_command(jobdata)
+    end
+    if command == "inspect" then
+        return _process_inspect_var_command(jobdata)
     end
 
     local sess_id = jobdata.current_session_id

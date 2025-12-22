@@ -14,6 +14,7 @@ local Trackers = require("loop.tools.Trackers")
 ---|"continue_all"
 ---|"terminate_all"
 ---|"debug_mode"
+---|"inspect"
 
 ---@class loop.job.DebugJob.SessionController
 ---@field continue fun(thread_id: number, all_threads: boolean)
