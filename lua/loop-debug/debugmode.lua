@@ -65,7 +65,6 @@ end
 -- -------------------------------------------------------------------
 function M.enable_debug_mode()
     if _debug_mode_on then
-        notifications.notify("Debug mode already active", vim.log.levels.WARN)
         return
     end
 
@@ -120,10 +119,10 @@ function M.enable_debug_mode()
     })
 
     _debug_mode_on = true
-    notifications.notify(
-        "DEBUG MODE ON → h=out  j=over  k=back  l=in c=continue Esc=quit",
-        vim.log.levels.WARN
-    )
+
+    --local left = "%#ErrorMsg# 🐞 DEBUGGING %#Normal#"
+    --local right = "%#Comment#h:Out j:Over k:Back l:In c:Cont Esc:Exit%#Normal#"
+    --vim.wo.winbar = string.format(" %s %%= %s ", left, right)
 end
 
 -- -------------------------------------------------------------------
@@ -131,8 +130,6 @@ end
 -- -------------------------------------------------------------------
 function M.disable_debug_mode()
     if not _debug_mode_on then return end
-
-    vim.api.nvim_clear_autocmds({ group = _debug_mode_detection })
 
     -- Remove our mappings
     for _, key in ipairs(DEBUG_KEYS) do
@@ -163,9 +160,10 @@ function M.disable_debug_mode()
     saved.scrolloff = nil
 
     _clear_highlight(_last_hl_bufnr)
+    vim.api.nvim_clear_autocmds({ group = _debug_mode_detection })
+    --vim.wo.winbar = nil
 
     _debug_mode_on = nil
-    notifications.notify("Debug mode OFF", vim.log.levels.INFO)
 end
 
 -- -------------------------------------------------------------------
