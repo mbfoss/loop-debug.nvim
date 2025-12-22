@@ -63,7 +63,10 @@ function BaseSession:start(opts)
                     opts.on_stderr(text)
                 end)
             end),
-        on_exit    = opts.on_exit,
+        on_exit    = function()
+            vim.schedule(function() self:_on_exit() end)
+            vim.schedule(opts.on_exit)
+        end,
     }
 
     self.channel = Channel:new(self._name, channel_opts)
@@ -77,6 +80,25 @@ end
 
 function BaseSession:terminate()
     self.channel:terminate()
+end
+
+function BaseSession:_on_exit()
+    for seq, cb in pairs(self.callbacks) do
+        if cb then
+            -- send a fake response to avoid keeping the request pending
+            ---@type loopdebug.proto.Response
+            local resp = {
+                command = "",
+                seq = 0,
+                request_seq = seq,
+                type = "response",
+                success = false,
+                message = "session ended"
+            }
+            cb(resp)
+        end
+    end
+    self.callbacks = {}
 end
 
 ---@param event_name string

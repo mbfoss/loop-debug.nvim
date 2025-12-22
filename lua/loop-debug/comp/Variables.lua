@@ -105,30 +105,22 @@ end
 ---@param highlights loop.comp.ItemTree.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
-    ---@type loopdebug.proto.VariablePresentationHint|nil
-    local hint = data.presentationHint
+
     if data.is_na and not data.name then
         table.insert(highlights, { group = "NonText" })
         return "not available"
     end
-    local name = data.name or "unknown"
+    
     if not data then return "" end
     if data.scopelabel then
         table.insert(highlights, { group = "Directory" })
         return data.scopelabel
     end
-    if data.greyout then
-        table.insert(highlights, { group = "NonText" })
-    else
-        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
-        if data.is_na then
-            table.insert(highlights, { group = "NonText", start_col = #name + 2 })
-        else
-            local kind = hint and hint.kind or nil
-            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #name + 1 })
-        end
-    end
-    local value = data.value or ""
+
+    ---@type loopdebug.proto.VariablePresentationHint|nil
+    local hint = data.presentationHint    
+    local name = data.name and tostring(data.name) or "unknown"
+    local value = data.value and tostring(data.value) or ""
     if hint and hint.attributes and vim.list_contains(hint.attributes, "rawString") then
         -- unwrap quotes and decode escape sequences
         value = value
@@ -136,10 +128,25 @@ local function _variable_node_formatter(id, data, highlights)
             :gsub("\\n", "\n")
             :gsub("\\t", "\t")
     end
+    local text
     if value:find("\n", 1, true) then
-        return name .. ":\n" .. value
+        text = name .. ":\n" .. value
+    else
+        text = name .. ": " .. value
     end
-    return name .. ": " .. tostring(value)
+    if data.greyout then
+        table.insert(highlights, { group = "NonText" })
+    else
+        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
+        table.insert(highlights, { group = "NonText", start_col = #name, end_col = #name + 1 })
+        if data.is_na then
+            table.insert(highlights, { group = "NonText", start_col = #name + 2 })
+        else
+            local kind = hint and hint.kind or nil
+            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #name + 2 })
+        end
+    end
+    return text
 end
 
 ---@param data_providers loopdebug.session.DataProviders
@@ -180,8 +187,8 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
                 local var_item = {
                     id = {}, -- a unique id
                     parent_id = parent_id,
-                    data = { 
-                        is_na = true 
+                    data = {
+                        is_na = true
                     },
                 }
                 table.insert(children, var_item)
@@ -383,6 +390,13 @@ function Variables:_load_session_vars()
         data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
             if scopes_data and scopes_data.scopes then
                 self:_load_scopes(root_item.id, scopes_data.scopes, data_source.data_providers, cb)
+            else
+                ---@type loopdebug.comp.Variables.Item
+                local scope_item = {
+                    id = {}, -- a unique id
+                    data = { is_na = true },
+                }
+                cb({ scope_item })
             end
         end)
     end
