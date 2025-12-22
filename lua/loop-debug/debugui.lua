@@ -450,7 +450,7 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
         output_comp = sess_data.debuggee_output_comp
         if not output_comp then
             local page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
-            local page_ctrl = page_group.add_page(tostring(sess_id), sess_name)
+            local page_ctrl = page_group.add_page(tostring(sess_id), sess_name, true)
             output_comp = OutputLinesComp:new()
             output_comp:link_to_page(page_ctrl)
             sess_data.debuggee_output_comp = output_comp
@@ -493,7 +493,7 @@ local function _on_session_new_term_req(jobdata, name, args, cb)
     if not page_group then
         page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
     end
-    local proc, proc_err = page_group.add_term_page(page_id, start_args)
+    local proc, proc_err = page_group.add_term_page(page_id, start_args, true)
     if proc then
         cb(proc:get_pid(), nil)
     else
