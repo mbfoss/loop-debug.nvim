@@ -1,63 +1,63 @@
 local M = {}
 
-function M.get_expression_user_cursor()
-    -- 1. Check for Visual Selection first
-    -- This is the "gold standard" for evaluating specific parts of a line
-    local mode = vim.api.nvim_get_mode().mode
-    if mode:match("^[vV]") then
-        -- This helper gets the text of the last visual selection
-        local _, start_row, start_col, _ = unpack(vim.fn.getpos("v"))
-        local _, end_row, end_col, _ = unpack(vim.fn.getpos("."))
+---@return string|nil expr
+---@return nil|string  error
+function M.get_identifier_under_cursor()
+    local bufnr = vim.api.nvim_get_current_buf()
 
-        -- Correct for 1-based indexing and potential backwards selection
-        if start_row > end_row or (start_row == end_row and start_col > end_col) then
-            start_row, end_row = end_row, start_row
-            start_col, end_col = end_col, start_col
-        end
-
-        local lines = vim.api.nvim_buf_get_text(0, start_row - 1, start_col - 1, end_row - 1, end_col, {})
-        return table.concat(lines, "\n")
+    -- 1. Ensure we have a parser and a tree
+    local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
+    if not ok or not parser then
+        return nil, "treesitter parser not available"
     end
 
-    -- 2. Try Tree-sitter (Best for Python attributes like self.name)
-    local node = vim.treesitter.get_node()
+    -- 2. Force a parse to ensure the tree is up to date
+    local tree = parser:parse()[1]
+    if not tree then
+        return nil, "treesitter parser error"
+    end
+
+    -- 3. Get node at cursor specifically
+    -- We use get_node with specific buffer/pos params for better reliability
+    local node = vim.treesitter.get_node({ bufnr = bufnr })
+
     if node then
-        -- We look for common "expression" types
-        -- In Python: 'attribute' is self.x, 'subscript' is list[0]
+        -- important: don't include call expressions
         local expr_types = {
-            ["attribute"] = true,
-            ["subscript"] = true,
-            ["identifier"] = true,
-            ["call"] = true, -- eval a function call under cursor
+            attribute           = true,
+            subscript           = true,
+            identifier          = true,
+            field_expression    = true,
+            member_expression   = true,
+            property_identifier = true,
         }
 
+        ---@type TSNode?
         local target = node
+
+        -- Walk up the tree to find the top-most "expression" node
         while target do
-            if expr_types[target:type()] then
-                -- Check if parent is also an expression (to get the "fullest" path)
-                local parent = target:parent()
-                if parent and expr_types[parent:type()] then
-                    target = parent
-                else
-                    break
-                end
+            local parent = target:parent()
+            if parent and expr_types[parent:type()] then
+                target = parent
             else
-                target = target:parent()
+                -- If the current target is an expression type, keep it.
+                -- Otherwise, it might be a child (like a '(') of an expression.
+                if not expr_types[target:type()] and parent then
+                    target = parent
+                end
+                break
             end
         end
 
-        if target then
-            return vim.treesitter.get_node_text(target, 0)
+        if target and expr_types[target:type()] then
+            local text = vim.treesitter.get_node_text(target, bufnr)
+            if text and #text > 0 then
+                return text
+            end
         end
     end
-
-    -- 3. Fallback to Word under cursor
-    return vim.fn.expand("<cword>")
+    return nil
 end
-
--- Example usage with nvim-dap
--- vim.keymap.set('n', '<leader>de', function()
---     require('dapui').eval(M.get_dap_expression())
--- end)
 
 return M

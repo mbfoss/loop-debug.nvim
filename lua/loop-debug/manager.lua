@@ -381,9 +381,9 @@ local function _process_inspect_var_command(jobdata)
     end
 
     local dbgtools = require('loop-debug.tools.dbgtools')
-    local expr = dbgtools.get_expression_user_cursor()
+    local expr, expr_err = dbgtools.get_identifier_under_cursor()
     if not expr then
-        return false, "No expression at the cursor location"
+        return false, expr_err or "No expression at the cursor location"
     end
     local frame = sess_data.top_frame -- TODO: implement a current frame system
     sess_data.data_providers.evaluate_provider({
@@ -391,12 +391,11 @@ local function _process_inspect_var_command(jobdata)
         context = "watch",
         frameId = frame and frame.id or nil
     }, function(err, data)
-        -- TODO: implement a timeout mechanism for all rquests
-        -- and use here to avoid delayed replies
         if data and data.result then
-            floatwin.open_central_float(daptools.format_variable(data.result, data.presentationHint))
+            floatwin.open_central_float(expr, daptools.format_variable(data.result, data.presentationHint))
         else
-            vim.notify("Failed to read variable " .. tostring(err))
+            err = err or "not available"
+            floatwin.open_central_float("Error", err)
         end
     end)
     return true
@@ -480,6 +479,8 @@ end
 ---@param category string
 ---@param output string
 local function _on_session_output(jobdata, sess_id, sess_name, category, output)
+    if jobdata.page_manager.expired() then return end
+
     local sess_data = jobdata.session_data[sess_id]
     assert(sess_data, "missing session data")
 
@@ -630,9 +631,6 @@ function M.track_new_debugjob(task_name, page_manager)
     }
 
     _current_job_data = jobdata
-    debugmode.command_function = function(cmd)
-        jobdata:command(cmd)
-    end
 
     tasklist_comp:add_tracker({
         on_selection = function(item)

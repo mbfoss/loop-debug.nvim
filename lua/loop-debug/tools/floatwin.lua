@@ -3,8 +3,9 @@ local M = {}
 local debug_win_augroup = vim.api.nvim_create_augroup("LoopDebugPluginModalWin", { clear = true })
 local _current_win = nil
 
+---@param title string
 ---@param text string
-function M.open_central_float(text)
+function M.open_central_float(title, text)
     -- 1. Close existing to prevent stacking
     if _current_win and vim.api.nvim_win_is_valid(_current_win) then
         vim.api.nvim_win_close(_current_win, true)
@@ -45,8 +46,8 @@ function M.open_central_float(text)
         row = row,
         col = col,
         style = "minimal",
-        border = "double", -- Double border looks more "Central" and "Serious"
-        title = " Inspect Value ",
+        border = "rounded",
+        title = " " .. tostring(title) .. " ",
         title_pos = "center",
     })
     _current_win = win
