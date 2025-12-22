@@ -94,7 +94,7 @@ function StackTrace:init()
                     end)
                 end
             end
-        end
+        end,
     })
 end
 

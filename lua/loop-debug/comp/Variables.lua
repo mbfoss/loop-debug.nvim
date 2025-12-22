@@ -2,6 +2,7 @@ local class        = require('loop.tools.class')
 local ItemTreeComp = require('loop.comp.ItemTree')
 local strtools     = require('loop.tools.strtools')
 local watchexpr    = require('loop-debug.watchexpr')
+local floatwin    = require('loop-debug.tools.floatwin')
 
 ---@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
 
@@ -15,6 +16,22 @@ local watchexpr    = require('loop-debug.watchexpr')
 ---@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
 local Variables    = class(ItemTreeComp)
 
+---@param s string
+---@return string preview
+---@return boolean is_different
+local function _preview_string(s)
+    -- check conditions for returning as-is
+    if #s < 50 and not s:find("\n", 1, true) then
+        return s, false
+    end
+    -- take first 50 characters
+    local preview = s:sub(1, 50)
+    -- replace newlines with literal '\n'
+    preview = preview:gsub("\n", "\\n")
+    return preview, true
+end
+
+-- TODO: move this to a seperate module
 local function floating_input_at_cursor(opts)
     local prev_win = vim.api.nvim_get_current_win()
     -- Create scratch buffer
@@ -105,21 +122,60 @@ end
 ---@param highlights loop.comp.ItemTree.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
-
     if data.is_na and not data.name then
         table.insert(highlights, { group = "NonText" })
         return "not available"
     end
-    
+
     if not data then return "" end
     if data.scopelabel then
         table.insert(highlights, { group = "Directory" })
         return data.scopelabel
     end
 
-    ---@type loopdebug.proto.VariablePresentationHint|nil
-    local hint = data.presentationHint    
+    local hint = data.presentationHint
     local name = data.name and tostring(data.name) or "unknown"
+    local value = data.value and tostring(data.value) or ""
+    local preview, is_different = _preview_string(value)
+    local text = name .. ": " .. preview
+    if is_different then
+        text = text .. "…"
+    end
+    if data.greyout then
+        table.insert(highlights, { group = "NonText" })
+    else
+        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
+        if data.is_na then
+            table.insert(highlights, { group = "NonText", start_col = #name })
+        else
+            local start_col = #name
+            local end_col = 2
+            table.insert(highlights, { group = "NonText", start_col = start_pos, end_col = end_col })
+            start_pos = end_col
+            end_col = start_pos + #preview
+            local kind = hint and hint.kind or nil
+            table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_pos, end_col = end_col })
+            if is_different then
+                start_pos = end_col
+                end_col = start_pos + 1
+                table.insert(highlights, { group = "NonText", start_col = start_pos, end_col = end_col })
+            end
+        end
+    end
+    return text
+end
+
+---@param id any
+---@param data any
+local function _open_value_floatwin(id, data)
+    if data.is_na  then
+        return
+    end
+    if data.scopelabel then
+        return
+    end
+    ---@type loopdebug.proto.VariablePresentationHint|nil
+    local hint = data.presentationHint
     local value = data.value and tostring(data.value) or ""
     if hint and hint.attributes and vim.list_contains(hint.attributes, "rawString") then
         -- unwrap quotes and decode escape sequences
@@ -128,25 +184,7 @@ local function _variable_node_formatter(id, data, highlights)
             :gsub("\\n", "\n")
             :gsub("\\t", "\t")
     end
-    local text
-    if value:find("\n", 1, true) then
-        text = name .. ":\n" .. value
-    else
-        text = name .. ": " .. value
-    end
-    if data.greyout then
-        table.insert(highlights, { group = "NonText" })
-    else
-        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
-        table.insert(highlights, { group = "NonText", start_col = #name, end_col = #name + 1 })
-        if data.is_na then
-            table.insert(highlights, { group = "NonText", start_col = #name + 2 })
-        else
-            local kind = hint and hint.kind or nil
-            table.insert(highlights, { group = _get_var_highlight(kind), start_col = #name + 2 })
-        end
-    end
-    return text
+    floatwin.open_central_float(value)
 end
 
 ---@param data_providers loopdebug.session.DataProviders
@@ -260,6 +298,9 @@ function Variables:init()
     self:add_tracker({
         on_toggle = function(id, data, expanded)
             self._layout_cache[id] = expanded
+        end,
+        on_open = function (id, data)
+            _open_value_floatwin(id, data)
         end
     })
 
