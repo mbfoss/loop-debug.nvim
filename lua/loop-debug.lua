@@ -71,20 +71,22 @@ function M.init()
 
     if config.current.default_keymaps then
         vim.keymap.set("n", "<leader>dd", ":LoopDebug<CR>", { desc = "Select LoopDebug command", silent = true })
+        vim.keymap.set("n", "<leader>du", ":LoopDebug ui<CR>", { desc = "Toggle UI", silent = true })
         vim.keymap.set("n", "<leader>db", ":LoopDebug breakpoint<CR>", { desc = "Toggle breakpoint", silent = true })
         vim.keymap.set("n", "<leader>dB", ":LoopDebug breakpoint list<CR>", { desc = "List breakpoints", silent = true })
-        vim.keymap.set("n", "<leader>dm", ":LoopDebug debug_mode<CR>", { desc = "Toggle debug mode", silent = true })
         vim.keymap.set("n", "<leader>ds", ":LoopDebug session<CR>", { desc = "Select debug session", silent = true })
         vim.keymap.set("n", "<leader>dt", ":LoopDebug thread<CR>", { desc = "Select thread", silent = true })
         vim.keymap.set("n", "<leader>df", ":LoopDebug frame<CR>", { desc = "Select stack frame", silent = true })
-        vim.keymap.set("n", "<leader>di", ":LoopDebug inspect<CR>",
-            { desc = "Inspect value under the cursor", silent = true })
+        vim.keymap.set("n", "<leader>di", ":LoopDebug inspect<CR>", { desc = "Inspect value", silent = true })
         vim.keymap.set("n", "<leader>dp", ":LoopDebug pause<CR>", { desc = "Pause execution", silent = true })
+        vim.keymap.set("n", "<leader>dl", ":LoopDebug step_in<CR>", { desc = "Step into", silent = true })
+        vim.keymap.set("n", "<leader>dh", ":LoopDebug step_out<CR>", { desc = "Step out", silent = true })
+        vim.keymap.set("n", "<leader>dj", ":LoopDebug step_over<CR>", { desc = "Step over", silent = true })
+        vim.keymap.set("n", "<leader>dk", ":LoopDebug step_back<CR>", { desc = "Step back", silent = true })
         vim.keymap.set("n", "<leader>dc", ":LoopDebug continue<CR>", { desc = "Continue execution", silent = true })
-        vim.keymap.set("n", "<leader>dC", ":LoopDebug continue_all<CR>",
-            { desc = "Continue all paused sesions", silent = true })
-        vim.keymap.set("n", "<leader>dK", ":LoopDebug terminate_all<CR>",
-            { desc = "Terminal all debug sessions", silent = true })
+        vim.keymap.set("n", "<leader>dC", ":LoopDebug continue_all<CR>", { desc = "Continue debug", silent = true })
+        vim.keymap.set("n", "<leader>dk", ":LoopDebug terminate<CR>", { desc = "Terminate debug", silent = true })
+        vim.keymap.set("n", "<leader>dK", ":LoopDebug terminate_all<CR>", { desc = "Terminate debug", silent = true })
     end
 end
 
@@ -92,10 +94,32 @@ end
 -- Command completion
 -----------------------------------------------------------
 local function _debug_commands()
-    return { "breakpoint", "session", "thread", "frame",
-        "inspect", "pause", "continue", "step_in", "step_out", "step_over",
-        "step_back", "terminate", "continue_all", "terminate_all", "debug_mode" }
+    return {
+        -- UI
+        "ui",
+        -- Breakpoints
+        "breakpoint",
+        -- Execution control
+        "continue",
+        "continue_all",
+        "pause",
+        -- Stepping
+        "step_over",
+        "step_in",
+        "step_out",
+        "step_back",
+        -- Navigation
+        "session",
+        "thread",
+        "frame",
+        -- Inspection
+        "inspect",
+        -- Termination
+        "terminate",
+        "terminate_all",
+    }
 end
+
 
 local function _debug_subcommands(args)
     if #args == 2 then
@@ -136,19 +160,25 @@ function M.select_command()
     -- Top-level debug commands
     ------------------------------------------------------------------
     local debug_cmds = {
-        { "debug_mode",    "Toggle debug mode" },
+        -- Session
+        { "ui",            "Toggle debug UI" },
+        -- Breakpoints
         { "breakpoint",    "Breakpoint operations" },
-        { "session",       "Show debug session info" },
-        { "thread",        "Select debug thread" },
-        { "frame",         "Select stack frame" },
-        { "inspect",       "Inspect variable at the cursor location" },
-        { "pause",         "Pause execution" },
-        { "step_in",       "Step into" },
-        { "step_out",      "Step out" },
-        { "step_over",     "Step over" },
-        { "step_back",     "Step back" },
+        -- Execution control
         { "continue",      "Continue execution" },
         { "continue_all",  "Continue all sessions" },
+        { "pause",         "Pause execution" },
+        { "step_over",     "Step over" },
+        { "step_in",       "Step into" },
+        { "step_out",      "Step out" },
+        { "step_back",     "Step back" },
+        -- Navigation
+        { "session",       "Select debug session" },
+        { "thread",        "Select thread" },
+        { "frame",         "Select stack frame" },
+        -- Inspection
+        { "inspect",       "Inspect variable at the cursor location" },
+        -- Termination
         { "terminate",     "Terminate debug session" },
         { "terminate_all", "Terminate all sessions" },
     }

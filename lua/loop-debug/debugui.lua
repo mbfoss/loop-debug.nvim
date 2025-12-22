@@ -1,6 +1,5 @@
 local config          = require("loop-debug.config")
 local signs           = require('loop-debug.signs')
-local debugmode       = require('loop-debug.debugmode')
 local filetools       = require('loop.tools.file')
 local ItemListComp    = require('loop.comp.ItemList')
 local OutputLinesComp = require('loop.comp.OutputLines')
@@ -71,14 +70,8 @@ end
 function _jump_to_frame(frame)
     if not (frame and frame.source and frame.source.path) then return end
     if not filetools.file_exists(frame.source.path) then return end
-
     -- Open file and move cursor
-    debugmode.next_winleave_ok(true)
-    local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
-    debugmode.next_winleave_ok(false)
-
-    debugmode.highlight_line(frame.line, bufnr)
-
+    uitools.smart_open_file(frame.source.path, frame.line, frame.column)
     -- Place sign for current frame
     signs.place_file_sign(1, frame.source.path, frame.line, "currentframe", "currentframe")
 end
@@ -684,31 +677,9 @@ function M.track_new_debugjob(task_name, page_manager)
             jobdata.job_success = (code == 0)
             _refresh_task_page(jobdata)
             _current_job_data = nil
-            debugmode.command_function = nil
-            debugmode.disable_debug_mode()
         end
     }
     return tracker
-end
-
-function _toggle_debug_mode()
-    if debugmode.is_active() then
-        debugmode.disable_debug_mode()
-        return
-    end
-    local job = _current_job_data
-    if not job then
-        notifications.notify("No active debug task", vim.log.levels.WARN)
-        return
-    end
-    ---@type loop.debugui.SessionData
-    local session_data = job.session_data[job.current_session_id]
-    if not session_data then
-        notifications.notify("No active debug session", vim.log.levels.WARN)
-        return
-    end
-    debugmode.enable_debug_mode()
-    _switch_to_frame(job, session_data.top_frame)
 end
 
 ---@param command loop.job.DebugJob.Command|nil
@@ -727,8 +698,8 @@ function M.debug_command(command, arg1)
         notifications.notify("Debug command missing", vim.log.levels.WARN)
         return
     end
-    if command == "debug_mode" then
-        _toggle_debug_mode()
+    if command == "ui" then
+        vim.notify("not implemented")
         return
     end
     local ok, err = job.command(job, command)
