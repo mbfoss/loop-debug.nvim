@@ -14,7 +14,7 @@ local daptools        = require('loop-debug.dap.daptools')
 
 local M               = {}
 
----@class loop.debugui.SessionData
+---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
@@ -26,19 +26,19 @@ local M               = {}
 ---@field adapter_output_comp loop.comp.OutputLines|nil
 ---@field debuggee_output_comp loop.comp.OutputLines|nil
 
----@class loop.debugui.DebugJobData
+---@class loopdebug.mgr.DebugJobData
 ---@field jobname string
 ---@field job_ended boolean|nil
 ---@field job_success boolean|nil
 ---@field page_manager loop.PageManager
 ---@field current_session_id number|nil
----@field session_data table<number,loop.debugui.SessionData>
+---@field session_data table<number,loopdebug.mgr.SessionData>
 ---@field task_list_comp loop.comp.ItemList
 ---@field variables_comp loopdebug.comp.Variables
 ---@field stacktrace_comp loopdebug.comp.StackTrace
----@field command fun(data:loop.debugui.DebugJobData,cmd:loop.job.DebugJob.Command):boolean,(string|nil)
+---@field command fun(data:loopdebug.mgr.DebugJobData,cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
----@type loop.debugui.DebugJobData|nil
+---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
 
 local _page_groups    = {
@@ -76,7 +76,7 @@ function _jump_to_frame(frame)
     signs.place_file_sign(1, frame.source.path, frame.line, "currentframe", "currentframe")
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param frame loopdebug.proto.StackFrame
 local function _switch_to_frame(jobdata, frame)
     local sess_id = jobdata.current_session_id
@@ -96,7 +96,7 @@ local function _switch_to_frame(jobdata, frame)
     jobdata.variables_comp:update_data(sess_id, sess_name, data_providers, frame)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param thread_id number
 local function _switch_to_thread(jobdata, sess_id, thread_id)
@@ -128,13 +128,13 @@ local function _switch_to_thread(jobdata, sess_id, thread_id)
     jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id, thread_name)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 local function _refresh_task_page(jobdata)
     if jobdata.job_ended then
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = 0,
-            ---@class loop.debugui.TaskPageItemData
+            ---@class loopdebug.mgr.TaskPageItemData
             data = {
                 label = jobdata.job_success and "Task ended" or "Task failed",
                 nb_paused_threads = 0,
@@ -167,7 +167,7 @@ local function _refresh_task_page(jobdata)
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = sess_id,
-            ---@class loop.debugui.TaskPageItemData
+            ---@class loopdebug.mgr.TaskPageItemData
             data = {
                 label = tostring(sess_id) .. ' ' .. tostring(sdata.sess_name) .. ' - ' .. state,
                 nb_paused_threads = nb_paused_threads,
@@ -182,7 +182,7 @@ local function _refresh_task_page(jobdata)
     jobdata.task_list_comp:set_ui_flags(uiflags)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param thread_pause_evt? loopdebug.session.notify.ThreadsEventScope|nil
 local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
@@ -223,7 +223,7 @@ local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
     end
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 ---@param parent_id number|nil
@@ -231,7 +231,7 @@ end
 ---@param data_providers loopdebug.session.DataProviders
 local function _on_session_added(jobdata, sess_id, sess_name, parent_id, controller, data_providers)
     assert(not jobdata.session_data[sess_id])
-    ---@type loop.debugui.SessionData
+    ---@type loopdebug.mgr.SessionData
     local session_data = {
         sess_name = sess_name,
         controller = controller,
@@ -247,7 +247,7 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
     _refresh_task_page(jobdata)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 local function _on_session_removed(jobdata, sess_id, sess_name)
@@ -255,7 +255,7 @@ local function _on_session_removed(jobdata, sess_id, sess_name)
     _refresh_task_page(jobdata)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_continue_all_command(jobdata)
     for _, session_data in pairs(jobdata.session_data) do
@@ -266,7 +266,7 @@ local function _process_continue_all_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_terminate_all_command(jobdata)
     for _, session_data in pairs(jobdata.session_data) do
@@ -277,7 +277,7 @@ local function _process_terminate_all_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_select_session_command(jobdata)
     local choices = {}
@@ -294,12 +294,12 @@ local function _process_select_session_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_select_thread_command(jobdata)
     local sess_id = jobdata.current_session_id
 
-    ---@type loop.debugui.SessionData|nil
+    ---@type loopdebug.mgr.SessionData|nil
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         return false, "No active debug session"
@@ -326,12 +326,12 @@ local function _process_select_thread_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_select_frame_command(jobdata)
     local sess_id = jobdata.current_session_id
 
-    ---@type loop.debugui.SessionData|nil
+    ---@type loopdebug.mgr.SessionData|nil
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         return false, "No active debug session"
@@ -365,11 +365,11 @@ local function _process_select_frame_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@return boolean, string|nil
 local function _process_inspect_var_command(jobdata)
     local sess_id = jobdata.current_session_id
-    ---@type loop.debugui.SessionData|nil
+    ---@type loopdebug.mgr.SessionData|nil
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         return false, "No active debug session"
@@ -402,7 +402,7 @@ local function _process_inspect_var_command(jobdata)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param command loop.job.DebugJob.Command
 ---@return boolean
 ---@return string|nil
@@ -427,7 +427,7 @@ local function _on_debug_command(jobdata, command)
     end
 
     local sess_id = jobdata.current_session_id
-    ---@type loop.debugui.SessionData|nil
+    ---@type loopdebug.mgr.SessionData|nil
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         return false, "No active debug session"
@@ -452,14 +452,14 @@ local function _on_debug_command(jobdata, command)
     return true
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 local function _greyout_thread_context_pages(jobdata, sess_id)
     jobdata.variables_comp:greyout_content(sess_id)
     jobdata.stacktrace_comp:greyout_content()
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 ---@param data loopdebug.session.notify.StateData
@@ -474,7 +474,7 @@ local function _on_session_state_update(jobdata, sess_id, sess_name, data)
     _refresh_task_page(jobdata)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 ---@param category string
@@ -514,7 +514,7 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
     end
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param name string
 ---@param args loopdebug.proto.RunInTerminalRequestArguments
 ---@param cb fun(pid: number|nil, err: string|nil)
@@ -553,7 +553,7 @@ local function _debug_session_item_formatter(item)
     return str
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
@@ -566,7 +566,7 @@ local function _on_session_thread_pause(jobdata, sess_id, sess_name, event_data)
     _switch_to_session(jobdata, sess_id, event_data)
 end
 
----@param jobdata loop.debugui.DebugJobData
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
@@ -616,7 +616,7 @@ function M.track_new_debugjob(task_name, page_manager)
         _open_split_view("Variables", "Call Stack")
     end)
 
-    ---@type loop.debugui.DebugJobData
+    ---@type loopdebug.mgr.DebugJobData
     local jobdata = {
         jobname = task_name,
         page_manager = page_manager,

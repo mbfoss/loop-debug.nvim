@@ -2,7 +2,7 @@ local M = {}
 
 local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
-local debugui = require('loop-debug.debugui')
+local manager = require('loop-debug.manager')
 local bpts_ui = require('loop-debug.bpts_ui')
 local projinfo = require('loop.projinfo')
 local fntools = require('loop.tools.fntools')
@@ -24,7 +24,7 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     local job = DebugJob:new(args.name)
 
     -- Add trackers
-    job:add_tracker(debugui.track_new_debugjob(args.name, page_manager))
+    job:add_tracker(manager.track_new_debugjob(args.name, page_manager))
     job:add_tracker(bpts_ui.track_new_debugjob(args.name))
     job:add_tracker({ on_exit = exit_handler })
 
