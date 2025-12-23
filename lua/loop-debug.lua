@@ -88,6 +88,11 @@ function M.init()
         vim.keymap.set("n", "<leader>dC", ":LoopDebug continue_all<CR>", { desc = "Continue debug", silent = true })
         vim.keymap.set("n", "<leader>dk", ":LoopDebug terminate<CR>", { desc = "Terminate debug", silent = true })
         vim.keymap.set("n", "<leader>dK", ":LoopDebug terminate_all<CR>", { desc = "Terminate debug", silent = true })
+
+        vim.keymap.set("n", "<A-l>", ":LoopDebug step_in<CR>", { desc = "Step into", silent = true })
+        vim.keymap.set("n", "<A-h>", ":LoopDebug step_out<CR>", { desc = "Step out", silent = true })
+        vim.keymap.set("n", "<A-j>", ":LoopDebug step_over<CR>", { desc = "Step over", silent = true })
+        vim.keymap.set("n", "<A-k>", ":LoopDebug step_back<CR>", { desc = "Step back", silent = true })        
     end
 end
 

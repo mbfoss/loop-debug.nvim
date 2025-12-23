@@ -1,63 +1,39 @@
 local M = {}
 
----@return string|nil expr
----@return nil|string  error
-function M.get_identifier_under_cursor()
-    local bufnr = vim.api.nvim_get_current_buf()
+--- Gets the text based on current mode (Normal/Visual)
+function M.get_vetted_text()
+    local mode = vim.api.nvim_get_mode().mode
+    local text = ""
 
-    -- 1. Ensure we have a parser and a tree
-    local ok, parser = pcall(vim.treesitter.get_parser, bufnr)
-    if not ok or not parser then
-        return nil, "treesitter parser not available"
-    end
+    if mode:find("[vV\22]") then
+        -- 1. Visual Mode: Get selection
+        -- Use "gv" to ensure marks are updated to current selection
+        local _, start_row, start_col, _ = unpack(vim.fn.getpos("v"))
+        local _, end_row, end_col, _ = unpack(vim.fn.getpos("."))
 
-    -- 2. Force a parse to ensure the tree is up to date
-    local tree = parser:parse()[1]
-    if not tree then
-        return nil, "treesitter parser error"
-    end
-
-    -- 3. Get node at cursor specifically
-    -- We use get_node with specific buffer/pos params for better reliability
-    local node = vim.treesitter.get_node({ bufnr = bufnr })
-
-    if node then
-        -- important: don't include call expressions
-        local expr_types = {
-            attribute           = true,
-            subscript           = true,
-            identifier          = true,
-            field_expression    = true,
-            member_expression   = true,
-            property_identifier = true,
-        }
-
-        ---@type TSNode?
-        local target = node
-
-        -- Walk up the tree to find the top-most "expression" node
-        while target do
-            local parent = target:parent()
-            if parent and expr_types[parent:type()] then
-                target = parent
-            else
-                -- If the current target is an expression type, keep it.
-                -- Otherwise, it might be a child (like a '(') of an expression.
-                if not expr_types[target:type()] and parent then
-                    target = parent
-                end
-                break
-            end
+        -- Standardize start/end if user selected backwards
+        if start_row > end_row or (start_row == end_row and start_col > end_col) then
+            start_row, end_row = end_row, start_row
+            start_col, end_col = end_col, start_col
         end
 
-        if target and expr_types[target:type()] then
-            local text = vim.treesitter.get_node_text(target, bufnr)
-            if text and #text > 0 then
-                return text
-            end
+        local lines = vim.api.nvim_buf_get_text(0, start_row - 1, start_col - 1, end_row - 1, end_col, {})
+        text = table.concat(lines, "\n")
+
+        -- Limit length to 100 characters
+        if #text > 100 then
+            text = text:sub(1, 100)
         end
+    else
+        -- 2. Normal Mode: Get word and trim edge symbols
+        local word = vim.fn.expand("<cword>")
+
+        -- Pattern: ^%p* (leading symbols), (.-) (the word), %p*$ (trailing symbols)
+        -- The hyphen makes the match non-greedy
+        text = word:match("^%p*(.-)%p*$") or ""
     end
-    return nil
+
+    return text
 end
 
 return M

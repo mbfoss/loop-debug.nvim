@@ -419,7 +419,7 @@ local function _process_inspect_var_command(jobdata)
     end
 
     local dbgtools = require('loop-debug.tools.dbgtools')
-    local expr, expr_err = dbgtools.get_identifier_under_cursor()
+    local expr, expr_err = dbgtools.get_vetted_text()
     if not expr then
         return false, expr_err or "No variable at the cursor location"
     end
@@ -476,7 +476,7 @@ local function _on_debug_command(jobdata, command)
     end
 
     if not sess_data.cur_thread_id then
-        return false, "No thread selecteds"
+        return false, "No thread selected"
     end
 
     if command == 'continue' then
