@@ -13,7 +13,7 @@ local task_provider =
         state.uilayout = debugui.get_layout_config()
         return state
     end,
-    on_project_loaded = function(proj_dir, state)
+    on_wsect_loaded = function(ws_dir, state)
         if state.breakpoints then
             breakpoints.set_breakpoints(state.breakpoints)
             watchexpr.set(state.watchexpr or {})

@@ -12,7 +12,7 @@ return {
             name = "Debug",
             type = "debug",
             command = "${file:lua}",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "lua",
             request = "launch",
         }
@@ -39,7 +39,7 @@ return {
             name = "Debug",
             type = "debug",
             command = "${prompt:Select binary: }",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "lldb",
             request = "launch",
             runInTerminal = true,
@@ -67,7 +67,7 @@ return {
             name = "Debug",
             type = "debug",
             command = "${file:javascript}",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "js-debug",
             request = "launch",
             sourceMaps = true,
@@ -97,7 +97,7 @@ return {
             name = "Debug",
             type = "debug",
             command = "${file:python}",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "debugpy",
             request = "launch",
             justMyCode = false,
@@ -123,7 +123,7 @@ return {
             __order = field_order,
             name = "Debug Go program (delve)",
             type = "debug",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "go",
             request = "launch",
             mode = "debug",
@@ -153,7 +153,7 @@ return {
             debugger = "chrome",
             request = "launch",
             url = "http://localhost:3000",
-            webRoot = "${projdir}",
+            webRoot = "${wsdir}",
             userDataDir = false,
             sourceMaps = true,
         }
@@ -167,7 +167,7 @@ return {
             debugger = "chrome",
             request = "attach",
             port = 9222,
-            webRoot = "${projdir}",
+            webRoot = "${wsdir}",
         }
     },
     -- ==================================================================
@@ -180,7 +180,7 @@ return {
             name = "Debug",
             type = "debug",
             command = "${file}",
-            cwd = "${projdir}",
+            cwd = "${wsdir}",
             debugger = "bash",
             request = "launch",
         }
@@ -197,7 +197,7 @@ return {
             debugger = "php",
             request = "launch",
             port = 9003,
-            pathMappings = { ["/var/www/html"] = "${projdir}" },
+            pathMappings = { ["/var/www/html"] = "${wsdir}" },
         }
     },
     -- ==================================================================

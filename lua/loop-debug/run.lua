@@ -4,7 +4,7 @@ local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
 local manager = require('loop-debug.manager')
 local bpts_ui = require('loop-debug.bpts_ui')
-local projinfo = require('loop.projinfo')
+local wsinfo = require('loop.wsinfo')
 local fntools = require('loop.tools.fntools')
 
 ---@param args loop.DebugJob.StartArgs
@@ -61,9 +61,9 @@ function M.start_debug_task(task, page_manager, on_exit)
         return nil, ("no debugger config found for task.debugger '%s'"):format(tostring(task.debugger))
     end
 
-    local proj_dir = projinfo.get_proj_dir()
-    if not proj_dir then
-        return nil, "failed to read project dir"
+    local ws_dir = wsinfo.get_ws_dir()
+    if not ws_dir then
+        return nil, "failed to read wsect dir"
     end
 
     ---- debug adapter config ---
@@ -73,7 +73,7 @@ function M.start_debug_task(task, page_manager, on_exit)
         ---@type loopdebug.TaskContext
         local task_context = {
             task = task,
-            proj_dir = proj_dir
+            ws_dir = ws_dir
         }
         ---@type loopdebug.AdapterConfig
         adapter_config = debugger.adapter_config(task_context)
@@ -87,7 +87,7 @@ function M.start_debug_task(task, page_manager, on_exit)
         adapter_config = vim.deepcopy(debugger.adapter_config)
     end
 
-    adapter_config.cwd = adapter_config.cwd or proj_dir
+    adapter_config.cwd = adapter_config.cwd or ws_dir
     if not adapter_config.cwd then
         return nil, "'cwd' is missing in task config"
     end
@@ -104,7 +104,7 @@ function M.start_debug_task(task, page_manager, on_exit)
         ---@type loopdebug.TaskContext
         local task_context = {
             task = task,
-            proj_dir = proj_dir
+            ws_dir = ws_dir
         }
         request_args = request_args(task_context)
         if type(request_args) ~= "table" then
@@ -130,7 +130,7 @@ function M.start_debug_task(task, page_manager, on_exit)
     ---@type loopdebug.Config.Debugger.HookContext
     local hook_context = {
         task = task,
-        proj_dir = proj_dir,
+        ws_dir = ws_dir,
         adapter_config = adapter_config,
         page_manager = page_manager,
         user_data = {}

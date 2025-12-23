@@ -2,7 +2,7 @@ local strtools = require('loop.tools.strtools')
 
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
----@field proj_dir string
+---@field ws_dir string
 
 ---@param task loopdebug.Task
 local function get_task_program(task)
@@ -20,7 +20,7 @@ end
 
 ---@class loopdebug.Config.Debugger.HookContext
 ---@field task loopdebug.Task
----@field proj_dir string
+---@field ws_dir string
 ---@field adapter_config loopdebug.AdapterConfig
 ---@field page_manager loop.PageManager
 ---@field exit_code number|nil
@@ -38,7 +38,7 @@ end
 ---@param context loopdebug.TaskContext
 local function _get_task_cwd(context)
     local task = context.task
-    return task and task.cwd or context.proj_dir
+    return task and task.cwd or context.ws_dir
 end
 
 ---@type table<string,loopdebug.Config.Debugger>
@@ -196,7 +196,7 @@ debuggers["js-debug"] = {
                 .. "/mason/packages/js-debug-adapter/js-debug/src/dapDebugServer.js",
                 tostring(port),
             },
-            cwd = context.proj_dir,
+            cwd = context.ws_dir,
             output_handler = function(stream, data)
                 if context.user_data.output_handler then
                     context.user_data.output_handler(stream, data)
@@ -453,7 +453,7 @@ debuggers.netcoredbg = { -- renamed key to match common usage (was "csharp")
             type = "coreclr",
             request = "launch",
             program = task.program or function()
-                return vim.fn.input("Path to dll: ", context.proj_dir .. "/bin/Debug/", "file")
+                return vim.fn.input("Path to dll: ", context.ws_dir .. "/bin/Debug/", "file")
             end,
         }
     end,

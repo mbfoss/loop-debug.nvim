@@ -1,7 +1,7 @@
 local signs             = require('loop-debug.signs')
 local dapbreakpoints    = require('loop-debug.dap.breakpoints')
 local selector          = require("loop.tools.selector")
-local projinfo          = require("loop.projinfo")
+local wsinfo          = require("loop.wsinfo")
 local uitools           = require("loop.tools.uitools")
 
 local M                 = {}
@@ -135,9 +135,9 @@ local function _format_breakpoint(bp, verified)
         symbol = "▲" -- hit-condition
     end
     local file = bp.file
-    local projdir = projinfo.get_proj_dir()
-    if projdir then
-        file = vim.fs.relpath(projdir, file) or file
+    local wsdir = wsinfo.get_ws_dir()
+    if wsdir then
+        file = vim.fs.relpath(wsdir, file) or file
     end
     local parts = { symbol }
     table.insert(parts, " ")
@@ -227,9 +227,9 @@ end
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
     assert(_init_done, _init_err_msg)
-    local proj_dir = projinfo.get_proj_dir()
-    if not proj_dir then
-        vim.notify('No active project')
+    local ws_dir = wsinfo.get_ws_dir()
+    if not ws_dir then
+        vim.notify('No active wsect')
         return
     end
     command = command and command:match("^%s*(.-)%s*$") or ""
