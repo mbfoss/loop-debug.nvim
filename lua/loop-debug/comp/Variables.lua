@@ -427,7 +427,7 @@ function Variables:_load_session_vars()
             if scopes_data and scopes_data.scopes then
                 self:_load_scopes(root_item.id, scopes_data.scopes, data_source.data_providers, cb)
             else
-                ---@type loopdebug.comp.Variables.Item
+                ---@type loop.comp.ItemTree.Item
                 local scope_item = {
                     id = {}, -- a unique id
                     data = { is_na = true },

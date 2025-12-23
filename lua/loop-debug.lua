@@ -4,6 +4,7 @@ local M = {}
 -- Dependencies
 local config = require("loop-debug.config")
 local manager = require("loop-debug.manager")
+local debugui = require("loop-debug.ui")
 local strtools = require("loop.tools.strtools")
 
 -----------------------------------------------------------
@@ -215,6 +216,15 @@ end
 -- Dispatcher
 -----------------------------------------------------------
 
+function M.do_command(...)
+    local cmd = select(1, ...)
+    if cmd == "ui" then
+        debugui.toggle()
+        return
+    end
+    manager.debug_command(...)
+end
+
 function M.dispatch(opts)
     M.init()
 
@@ -229,7 +239,7 @@ function M.dispatch(opts)
         vim.notify("LoopDebug invalid command " .. subcmd, vim.log.levels.ERROR)
         return
     end
-    local ok, err = pcall(manager.debug_command, unpack(args))
+    local ok, err = pcall(M.do_command, unpack(args))
     if not ok then
         vim.notify(
             "LoopDebug " .. subcmd .. " failed: " .. tostring(err),

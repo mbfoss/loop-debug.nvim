@@ -11,6 +11,7 @@ local selector        = require('loop.tools.selector')
 local breakpoints_ui  = require('loop-debug.bpts_ui')
 local floatwin        = require('loop-debug.tools.floatwin')
 local daptools        = require('loop-debug.dap.daptools')
+local Trackers        = require("loop.tools.Trackers")
 
 local M               = {}
 
@@ -22,9 +23,11 @@ local M               = {}
 ---@field paused_threads table<number,boolean>
 ---@field thread_names table<number,string>
 ---@field cur_thread_id number|nil
----@field top_frame loopdebug.proto.StackFrame|nil
+---@field cur_frame loopdebug.proto.StackFrame|nil
 ---@field adapter_output_comp loop.comp.OutputLines|nil
 ---@field debuggee_output_comp loop.comp.OutputLines|nil
+
+---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
 ---@class loopdebug.mgr.DebugJobData
 ---@field jobname string
@@ -33,10 +36,22 @@ local M               = {}
 ---@field page_manager loop.PageManager
 ---@field current_session_id number|nil
 ---@field session_data table<number,loopdebug.mgr.SessionData>
----@field task_list_comp loop.comp.ItemList
----@field variables_comp loopdebug.comp.Variables
----@field stacktrace_comp loopdebug.comp.StackTrace
----@field command fun(data:loopdebug.mgr.DebugJobData,cmd:loop.job.DebugJob.Command):boolean,(string|nil)
+---@field sessionlist_comp loop.comp.ItemList
+---@field command_fn loopdebug.mgr.JobCommandFn
+
+---@class loopdebug.mgr.JobUpdateEvent
+---@field session_id number|nil
+---@field sess_name string|nil
+---@field state string|nil
+---@field cur_thread_id number|nil
+---@field cur_frame loopdebug.proto.StackFrame|nil
+---@field data_providers loopdebug.session.DataProviders
+
+---@class loopdebug.mgr.DebugTracker
+---@field on_job_update fun(update:loopdebug.mgr.JobUpdateEvent)
+
+---@type loop.tools.Trackers<loopdebug.mgr.DebugTracker>
+local _trackers       = Trackers:new()
 
 ---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
@@ -50,20 +65,45 @@ local _page_groups    = {
     debugger = "debugger",
 }
 
-function _open_split_view(group1, group2)
-    if not group1 then return end
-    local loop_project = require('loop.project')
-    local win = vim.api.nvim_get_current_win()
-    do
-        vim.cmd("leftabove vsplit")
-        vim.cmd("vertical resize " .. math.floor(vim.o.columns / 3))
-        loop_project.open_page(group1)
+
+---@param single_target loopdebug.mgr.DebugTracker|nil
+local function _send_job_udpate_event(single_target)
+    local job_data = _current_job_data
+    if not job_data then return end
+    local sess_id = job_data.current_session_id
+    local sess_data = sess_id and job_data.session_data[sess_id] or nil
+    if not sess_data then return end
+    ---@type loopdebug.mgr.JobUpdateEvent
+    local event = {
+        session_id = job_data.current_session_id,
+        sess_name = sess_data.sess_name,
+        cur_thread_id = sess_data.cur_thread_id,
+        cur_frame = sess_data.cur_frame,
+        data_providers = vim.fn.copy(sess_data.data_providers)
+    }
+    if _current_job_data then
+        if single_target then
+            if single_target.on_job_update then
+                single_target.on_job_update(event)
+            end
+        else
+            _trackers:invoke("on_job_update", event)
+        end
     end
-    if group2 then
-        vim.cmd("below split")
-        loop_project.open_page(group2)
-    end
-    vim.api.nvim_set_current_win(win)
+end
+
+---@param callbacks loopdebug.mgr.DebugTracker
+---@return number
+function M.add_tracker(callbacks)
+    local tracker_id = _trackers:add_tracker(callbacks)
+    _send_job_udpate_event(callbacks)
+    return tracker_id
+end
+
+---@param id number
+---@return boolean
+function M.remove_tracker(id)
+    return _trackers:remove_tracker(id)
 end
 
 ---@param frame loopdebug.proto.StackFrame
@@ -91,9 +131,10 @@ local function _switch_to_frame(jobdata, frame)
     local data_providers = session_data.data_providers
     local sess_name = session_data.sess_name or tostring(sess_id)
 
+    session_data.cur_frame = frame
     _jump_to_frame(frame)
 
-    jobdata.variables_comp:update_data(sess_id, sess_name, data_providers, frame)
+    _send_job_udpate_event()
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -106,7 +147,7 @@ local function _switch_to_thread(jobdata, sess_id, thread_id)
     if not sess_data then return end
 
     sess_data.cur_thread_id = thread_id
-    sess_data.top_frame = nil
+    sess_data.cur_frame = nil
 
     local data_providers = sess_data.data_providers
 
@@ -118,14 +159,11 @@ local function _switch_to_thread(jobdata, sess_id, thread_id)
         if topframe and topframe.source and topframe.source.path then
             --- check if it did not change meanwhile
             if sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
-                sess_data.top_frame = topframe
+                sess_data.cur_frame = topframe
                 _switch_to_frame(jobdata, topframe)
             end
         end
     end)
-
-    local thread_name = sess_data.thread_names[thread_id]
-    jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id, thread_name)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -141,8 +179,8 @@ local function _refresh_task_page(jobdata)
             }
         }
         local symbols = config.current.symbols
-        jobdata.task_list_comp:set_items({ item })
-        jobdata.task_list_comp:set_ui_flags(jobdata.job_success and '' or symbols.failure)
+        jobdata.sessionlist_comp:set_items({ item })
+        jobdata.sessionlist_comp:set_ui_flags(jobdata.job_success and '' or symbols.failure)
         return
     end
 
@@ -177,9 +215,9 @@ local function _refresh_task_page(jobdata)
         table.insert(list_items, item)
     end
 
-    jobdata.task_list_comp:set_items(list_items)
-    jobdata.task_list_comp:set_current_item_by_id(jobdata.current_session_id)
-    jobdata.task_list_comp:set_ui_flags(uiflags)
+    jobdata.sessionlist_comp:set_items(list_items)
+    jobdata.sessionlist_comp:set_current_item_by_id(jobdata.current_session_id)
+    jobdata.sessionlist_comp:set_ui_flags(uiflags)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -385,7 +423,7 @@ local function _process_inspect_var_command(jobdata)
     if not expr then
         return false, expr_err or "No variable at the cursor location"
     end
-    local frame = sess_data.top_frame -- TODO: implement a current frame system
+    local frame = sess_data.cur_frame
     sess_data.data_providers.evaluate_provider({
         expression = expr,
         context = "watch",
@@ -434,7 +472,14 @@ local function _on_debug_command(jobdata, command)
 
     if command == 'pause' then
         sess_data.controller.pause(sess_data.cur_thread_id or 0)
-    elseif command == 'continue' then
+        return true
+    end
+
+    if not sess_data.cur_thread_id then
+        return false, "No thread selecteds"
+    end
+
+    if command == 'continue' then
         sess_data.controller.continue(sess_data.cur_thread_id, true)
     elseif command == "step_in" then
         sess_data.controller.step_in(sess_data.cur_thread_id)
@@ -453,13 +498,6 @@ end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
-local function _greyout_thread_context_pages(jobdata, sess_id)
-    jobdata.variables_comp:greyout_content(sess_id)
-    jobdata.stacktrace_comp:greyout_content()
-end
-
----@param jobdata loopdebug.mgr.DebugJobData
----@param sess_id number
 ---@param sess_name string
 ---@param data loopdebug.session.notify.StateData
 local function _on_session_state_update(jobdata, sess_id, sess_name, data)
@@ -468,9 +506,12 @@ local function _on_session_state_update(jobdata, sess_id, sess_name, data)
     session_data.state = data.state
     if sess_id == jobdata.current_session_id and data.state == "ended" then
         signs.remove_signs("currentframe")
-        _greyout_thread_context_pages(jobdata, sess_id)
+        jobdata.current_session_id = nil
+        session_data.cur_thread_id = nil
+        session_data.cur_frame = nil
     end
     _refresh_task_page(jobdata)
+    _send_job_udpate_event()
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -579,14 +620,18 @@ local function _on_session_thread_continue(jobdata, sess_id, sess_name, event_da
     end
 
     signs.remove_signs("currentframe")
-    _greyout_thread_context_pages(jobdata, sess_id)
-
+    session_data.cur_frame = nil
     if event_data.all_thread then
         session_data.paused_threads = {}
+        session_data.cur_thread_id = nil
     else
         session_data.paused_threads[event_data.thread_id] = nil
+        if session_data.cur_thread_id == event_data.thread_id then
+            session_data.cur_thread_id = nil
+        end
     end
     _refresh_task_page(jobdata)
+    _send_job_udpate_event()
 end
 
 ---@param task_name string -- task name
@@ -595,54 +640,36 @@ end
 function M.track_new_debugjob(task_name, page_manager)
     assert(type(task_name) == "string")
 
-    local tasklist_comp = ItemListComp:new({
+    local sessionlist_comp = ItemListComp:new({
         formatter = _debug_session_item_formatter,
         show_current_prefix = true,
     })
 
-    local variables_comp = VariablesComp:new(task_name)
-    local stacktrace_comp = StackTraceComp:new(task_name)
-
     local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
-    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables,
-        "Variables")
-    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack,
-        "Call Stack")
-
-    tasklist_comp:link_to_page(tasks_page)
-    variables_comp:link_to_page(vars_page)
-    stacktrace_comp:link_to_page(stack_page)
-
-    vim.schedule(function()
-        _open_split_view("Variables", "Call Stack")
-    end)
+    sessionlist_comp:link_to_page(tasks_page)
 
     ---@type loopdebug.mgr.DebugJobData
     local jobdata = {
         jobname = task_name,
         page_manager = page_manager,
         session_data = {},
-        task_list_comp = tasklist_comp,
-        variables_comp = variables_comp,
-        stacktrace_comp = stacktrace_comp,
-        command = function(jobdata, cmd)
-            return _on_debug_command(jobdata, cmd)
-        end
+        sessionlist_comp = sessionlist_comp,
+        command_fn = function() return false end,
     }
+
+    jobdata.command_fn = function(cmd)
+        return _on_debug_command(jobdata, cmd)
+    end
 
     _current_job_data = jobdata
 
-    tasklist_comp:add_tracker({
+    sessionlist_comp:add_tracker({
         on_selection = function(item)
             if item then
                 _switch_to_session(jobdata, item.id)
             end
         end
     })
-
-    stacktrace_comp:add_frame_tracker(function(frame)
-        _switch_to_frame(jobdata, frame)
-    end)
 
     ---@type loop.job.debugjob.Tracker
     local tracker = {
@@ -696,11 +723,7 @@ function M.debug_command(command, arg1)
         notifications.notify("Debug command missing", vim.log.levels.WARN)
         return
     end
-    if command == "ui" then
-        vim.notify("not implemented")
-        return
-    end
-    local ok, err = job.command(job, command)
+    local ok, err = job.command_fn(command)
     if not ok then
         notifications.notify(err or "Debug command failed", vim.log.levels.WARN)
     end
