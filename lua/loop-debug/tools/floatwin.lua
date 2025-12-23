@@ -113,8 +113,7 @@ function M.input_at_cursor(opts)
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { opts.default })
     vim.api.nvim_win_set_cursor(win, { 1, #opts.default })
-    vim.cmd("normal! q")
-    vim.cmd("startinsert")
+    vim.cmd("startinsert!")
     local closed = false
     local function close(value)
         if closed then return end
@@ -131,8 +130,8 @@ function M.input_at_cursor(opts)
         local line = vim.api.nvim_get_current_line()
         close(line ~= "" and line or nil)
     end, { buffer = buf, nowait = true })
-    -- Cancel on Esc
-    vim.keymap.set("i", "<Esc>", function() close(nil) end, { buffer = buf, nowait = true })
+    -- Cancel on Esc in normal mode
+    vim.keymap.set("n", "<Esc>", function() close(nil) end, { buffer = buf, nowait = true })
     vim.api.nvim_create_autocmd("WinLeave", {
         once = true,
         callback = function()
