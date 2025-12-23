@@ -1,14 +1,23 @@
-local M          = {}
+local M                   = {}
+
+local manager             = require('loop-debug.manager')
+local CompBuffer          = require('loop.comp.CompBuffer')
+local VariablesComp       = require('loop-debug.comp.Variables')
+local StackTraceComp      = require('loop-debug.comp.StackTrace')
+
+local _ui_auto_group      = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
+
+local _manager_tracker_id = nil
 
 -- Configuration and State Storage
-M.layout_config  = {
+_layout_config            = {
     width = math.floor(vim.o.columns / 4),
     top_height = nil, -- If nil, split is equal (50/50)
 }
 
 -- Unique keys for window variables
-local KEY_MARKER = "loopdebugplugin_debugpanel"
-local KEY_TYPE   = "loopdebugplugin_panel_type" -- "TOP" or "BOTTOM"
+local KEY_MARKER          = "loopdebugplugin_debugpanel"
+local KEY_TYPE            = "loopdebugplugin_panel_type" -- "TOP" or "BOTTOM"
 
 local function is_managed_window(win_id)
     if not vim.api.nvim_win_is_valid(win_id) then return false end
@@ -26,16 +35,23 @@ local function get_managed_windows()
     return found
 end
 
+function M.get_layout_config()
+    return _layout_config
+end
+
+function M.set_layout_config(cfg)
+    _layout_config = cfg or {}
+    _layout_config.width = _layout_config.width or math.floor(vim.o.columns / 4)
+end
+
 function M.toggle()
     local managed = get_managed_windows()
 
     if #managed > 0 then
-        -- Before closing, save the current height of the TOP window
-        for _, win in ipairs(managed) do
-            if vim.api.nvim_win_is_valid(win) and vim.w[win][KEY_TYPE] == "TOP" then
-                M.layout_config.top_height = vim.api.nvim_win_get_height(win)
-                M.layout_config.width = vim.api.nvim_win_get_width(win)
-            end
+        vim.api.nvim_del_autocmd(_ui_auto_group)
+        if _manager_tracker_id then
+            manager.remove_tracker(_manager_tracker_id)
+            _manager_tracker_id = nil
         end
         for _, win in ipairs(managed) do
             vim.api.nvim_win_close(win, true)
@@ -48,16 +64,16 @@ function M.toggle()
     -- 1. Create the Vertical container
     vim.cmd("topleft vsplit")
     local top_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_width(top_win, M.layout_config.width)
+    vim.api.nvim_win_set_width(top_win, _layout_config.width)
 
     -- 2. Create the Horizontal split
     vim.cmd("split")
     local bottom_win = vim.api.nvim_get_current_win()
 
     -- 3. Restore Height with validation
-    if M.layout_config.top_height then
+    if _layout_config.top_height then
         -- Ensure we don't try to set a height taller than the screen - 2 (for status/cmd line)
-        local safe_height = math.min(M.layout_config.top_height, vim.o.lines - 3)
+        local safe_height = math.min(_layout_config.top_height, vim.o.lines - 3)
         if safe_height then
             vim.api.nvim_win_set_height(top_win, safe_height)
         end
@@ -68,94 +84,77 @@ function M.toggle()
         [bottom_win] = "BOTTOM"
     }
 
-    for win, type_name in pairs(config_map) do
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_win_set_buf(win, buf)
+    local vars_buffer = CompBuffer:new("debugvars", "Variables")
+    local stack_buffer = CompBuffer:new("callstack", "Call Stack")
 
+    vim.api.nvim_win_set_buf(top_win, vars_buffer:get_or_create_buf())
+    vim.api.nvim_win_set_buf(bottom_win, stack_buffer:get_or_create_buf())
+
+    for win, type_name in pairs(config_map) do
         -- WinVars
         vim.w[win][KEY_MARKER] = true
         vim.w[win][KEY_TYPE] = type_name
-
         -- Constraints
         vim.wo[win].winfixbuf = true
         vim.wo[win].winfixwidth = true
         -- Enable winfixheight so the horizontal split doesn't jump
         -- when other windows are opened/closed
-        --vim.wo[win].winfixheight = true
+        vim.wo[win].winfixheight = true
+        vim.wo[win].winfixwidth = true
     end
 
     if vim.api.nvim_win_is_valid(original_win) then
         vim.api.nvim_set_current_win(original_win)
     end
 
-    _assign_components()
+    vim.api.nvim_del_autocmd(_ui_auto_group)
+    vim.api.nvim_create_autocmd("WinResized", {
+        group = _ui_auto_group,
+        callback = function()
+            -- v.event.windows contains IDs of all windows that changed size
+            local targets = vim.v.event.windows
+            for _, winid in ipairs(targets or {}) do
+                if is_managed_window(winid) then
+                    local type = vim.w[winid].loopdebugplugin_panel_type
+                    if type == "TOP" then
+                        local total_cols = vim.o.columns
+                        local total_lines = vim.o.lines
+                        local w = vim.api.nvim_win_get_width(winid)
+                        local h = vim.api.nvim_win_get_height(winid)
+                        local is_width_valid = w < math.floor(total_cols * 0.6)
+                        local is_height_valid = h < math.floor(total_lines * 0.9)
+                        if is_width_valid then _layout_config.width = w end
+                        if is_height_valid then _layout_config.top_height = h end
+                    end
+                end
+            end
+        end,
+    })
+
+    local variables_comp = VariablesComp:new("Variables")
+    local stacktrace_comp = StackTraceComp:new("Call Stack")
+
+    if _manager_tracker_id then
+        manager.remove_tracker(_manager_tracker_id)
+        _manager_tracker_id = nil
+    end
+    _manager_tracker_id = manager.add_tracker({
+        on_job_update = function(update)
+            if update.session_id and update.sess_name and update.data_providers and update.cur_frame then
+                variables_comp:update_data(update.session_id, update.sess_name, update.data_providers, update.cur_frame)
+            else
+                variables_comp:greyout_content(update.session_id)
+            end
+            if update.data_providers and update.cur_thread_id then
+                stacktrace_comp:set_content(update.data_providers, update.cur_thread_id, update.cur_thread_name)
+            else
+                stacktrace_comp:greyout_content()
+            end
+        end
+    })
+
+    variables_comp:link_to_buffer(vars_buffer:make_controller())
+    stacktrace_comp:link_to_buffer(stack_buffer:make_controller())
 end
 
 return M
-
---[[
-
-    local variables_comp = VariablesComp:new(task_name)
-    local stacktrace_comp = StackTraceComp:new(task_name)
-
-
-    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables,
-        "Variables")
-    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack,
-        "Call Stack")
-
-    variables_comp:link_to_page(vars_page)
-    stacktrace_comp:link_to_page(stack_page)
-    jobdata.variables_comp:update_data(sess_id, sess_name, data_providers, frame)
-
-    _greyout_thread_context_pages(jobdata, sess_id)
-
-    ---@param jobdata loopdebug.mgr.DebugJobData
----@param sess_id number
-local function _greyout_thread_context_pages(jobdata, sess_id)
-    jobdata.variables_comp:greyout_content(sess_id)
-    jobdata.stacktrace_comp:greyout_content()
-end
-
-
-    local variables_comp = VariablesComp:new(task_name)
-    local stacktrace_comp = StackTraceComp:new(task_name)
-
-    local vars_page = page_manager.add_page_group(_page_groups.variables, "Variables").add_page(_page_groups.variables,
-        "Variables")
-    local stack_page = page_manager.add_page_group(_page_groups.stack, "Call Stack").add_page(_page_groups.stack,
-        "Call Stack")
-
-    variables_comp:link_to_page(vars_page)
-    stacktrace_comp:link_to_page(stack_page)
-
-        variables_comp = variables_comp,
-        stacktrace_comp = stacktrace_comp,
-
-    local thread_name = sess_data.thread_names[thread_id]
-    jobdata.stacktrace_comp:set_content(sess_data.data_providers, thread_id, thread_name)
-
-    stacktrace_comp:add_frame_tracker(function(frame)
-        _switch_to_frame(jobdata, frame)
-    end)
-
-
-function _open_split_view(group1, group2)
-    if not group1 then return end
-    local loop_project = require('loop.project')
-    local win = vim.api.nvim_get_current_win()
-    do
-        vim.cmd("leftabove vsplit")
-        vim.cmd("vertical resize " .. math.floor(vim.o.columns / 3))
-        loop_project.open_page(group1)
-    end
-    if group2 then
-        vim.cmd("below split")
-        loop_project.open_page(group2)
-    end
-    vim.api.nvim_set_current_win(win)
-end
-    vim.schedule(function()
-        _open_split_view("Variables", "Call Stack")
-    end)
-]]

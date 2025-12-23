@@ -83,12 +83,12 @@ function StackTrace:init()
 
     self._frametrackers = Trackers:new()
     self:add_tracker({
-        on_selection = function(item)
-            if item and item.data then
+        on_selection = function(id, data)
+            if id and data then
                 -- id 0 is the title line
-                if item.id > 0 then
+                if id > 0 then
                     ---@type loopdebug.proto.StackFrame
-                    local frame = item.data.frame
+                    local frame = data.frame
                     vim.schedule(function()
                         self._frametrackers:invoke("frame_selected", frame)
                     end)

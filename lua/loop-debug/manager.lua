@@ -3,8 +3,6 @@ local signs           = require('loop-debug.signs')
 local filetools       = require('loop.tools.file')
 local ItemListComp    = require('loop.comp.ItemList')
 local OutputLinesComp = require('loop.comp.OutputLines')
-local VariablesComp   = require('loop-debug.comp.Variables')
-local StackTraceComp  = require('loop-debug.comp.StackTrace')
 local uitools         = require('loop.tools.uitools')
 local notifications   = require('loop.notifications')
 local selector        = require('loop.tools.selector')
@@ -44,6 +42,7 @@ local M               = {}
 ---@field sess_name string|nil
 ---@field state string|nil
 ---@field cur_thread_id number|nil
+---@field cur_thread_name string|nil
 ---@field cur_frame loopdebug.proto.StackFrame|nil
 ---@field data_providers loopdebug.session.DataProviders
 
@@ -78,6 +77,7 @@ local function _send_job_udpate_event(single_target)
         session_id = job_data.current_session_id,
         sess_name = sess_data.sess_name,
         cur_thread_id = sess_data.cur_thread_id,
+        cur_thread_name = sess_data.thread_names[sess_data.cur_thread_id],
         cur_frame = sess_data.cur_frame,
         data_providers = vim.fn.copy(sess_data.data_providers)
     }
@@ -309,7 +309,7 @@ end
 local function _process_terminate_all_command(jobdata)
     for _, session_data in pairs(jobdata.session_data) do
         if session_data.cur_thread_id then
-            session_data.controller.continue(session_data.cur_thread_id, true)
+            session_data.controller.terminate()
         end
     end
     return true
@@ -535,7 +535,7 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
             local page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
             local page_ctrl = page_group.add_page(tostring(sess_id), sess_name, true)
             output_comp = OutputLinesComp:new()
-            output_comp:link_to_page(page_ctrl)
+            output_comp:link_to_buffer(page_ctrl)
             sess_data.debuggee_output_comp = output_comp
         end
     else
@@ -544,7 +544,7 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
             local page_group = jobdata.page_manager.add_page_group(_page_groups.debugger, "Debugger")
             local page_ctrl = page_group.add_page(tostring(sess_id), sess_name)
             output_comp = OutputLinesComp:new()
-            output_comp:link_to_page(page_ctrl)
+            output_comp:link_to_buffer(page_ctrl)
             sess_data.adapter_output_comp = output_comp
         end
     end
@@ -646,7 +646,7 @@ function M.track_new_debugjob(task_name, page_manager)
     })
 
     local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug").add_page("task", "Tasks", true)
-    sessionlist_comp:link_to_page(tasks_page)
+    sessionlist_comp:link_to_buffer(tasks_page)
 
     ---@type loopdebug.mgr.DebugJobData
     local jobdata = {
@@ -664,9 +664,9 @@ function M.track_new_debugjob(task_name, page_manager)
     _current_job_data = jobdata
 
     sessionlist_comp:add_tracker({
-        on_selection = function(item)
-            if item then
-                _switch_to_session(jobdata, item.id)
+        on_selection = function(id, data)
+            if id then
+                _switch_to_session(jobdata, id)
             end
         end
     })

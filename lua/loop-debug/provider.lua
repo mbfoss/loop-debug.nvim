@@ -1,6 +1,7 @@
 local run = require('loop-debug.run')
 local breakpoints = require('loop-debug.dap.breakpoints')
 local watchexpr = require('loop-debug.watchexpr')
+local debugui = require('loop-debug.ui')
 
 ---@type loop.TaskProvider
 local task_provider =
@@ -9,12 +10,14 @@ local task_provider =
         local state = {}
         state.breakpoints = breakpoints.get_breakpoints()
         state.watchexpr = watchexpr.get()
+        state.uilayout = debugui.get_layout_config()
         return state
     end,
     on_project_loaded = function(proj_dir, state)
         if state.breakpoints then
             breakpoints.set_breakpoints(state.breakpoints)
             watchexpr.set(state.watchexpr or {})
+            debugui.set_layout_config(state.uilayout)
         end
     end,
     get_config_schema = function()

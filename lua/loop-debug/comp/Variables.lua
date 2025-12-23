@@ -302,9 +302,9 @@ function Variables:init()
     self:_load_watch_expressions()
 end
 
----@param page_ctrl loop.PageControl
-function Variables:link_to_page(page_ctrl)
-    ItemTreeComp.link_to_page(self, page_ctrl)
+---@param comp loop.BufferController
+function Variables:link_to_buffer(comp)
+    ItemTreeComp.link_to_buffer(self, comp)
 
     --- Helper: edit an existing watch or add a new one
     local function add_watch()
@@ -328,16 +328,16 @@ function Variables:link_to_page(page_ctrl)
     end
 
     -- Add keymaps
-    page_ctrl.add_keymap("i", {
+    comp.add_keymap("i", {
         desc = "Add watch (inline)",
         callback = function() add_watch() end,
     })
 
-    page_ctrl.add_keymap("d", {
+    comp.add_keymap("d", {
         desc = "Delete watch",
         callback = function()
             ---@type loop.comp.ItemTree.Item|nil
-            local cur_item = self:get_cur_item(page_ctrl)
+            local cur_item = self:get_cur_item(comp)
             if not cur_item then return end
             if not cur_item.data.is_expr then return end
             watchexpr.remove(cur_item.data.name)
