@@ -419,9 +419,9 @@ local function _process_inspect_var_command(jobdata)
     end
 
     local dbgtools = require('loop-debug.tools.dbgtools')
-    local expr, expr_err = dbgtools.get_vetted_text()
+    local expr, expr_err = dbgtools.clean_cword()
     if not expr then
-        return false, expr_err or "No variable at the cursor location"
+        return false, expr_err or "No text under the cursor"
     end
     local frame = sess_data.cur_frame
     sess_data.data_providers.evaluate_provider({

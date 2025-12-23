@@ -257,8 +257,8 @@ function Variables:link_to_buffer(comp)
         floatwin.input_at_cursor({
             row_offset = row_offset,
             col_offset = col_offset,
-            width = 60,
-            default = text,
+            default_width = 20,
+            default_text = text,
             on_confirm = function(expr)
                 if not expr then return end
                 if not item then

@@ -88,55 +88,81 @@ function M.open_inspect_win(title, text)
     })
 end
 
--- TODO: move this to a seperate module
 function M.input_at_cursor(opts)
     local prev_win = vim.api.nvim_get_current_win()
-    -- Create scratch buffer
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].buftype = "nofile"
-    vim.bo[buf].bufhidden = "wipe"
-    vim.bo[buf].buftype = "nofile"
-    vim.bo[buf].swapfile = false
-    vim.bo[buf].undolevels = -1
-    -- Cursor position
-    -- Floating window at current line
+    
+    -- Buffer setup
+    local buf_opts = {
+        buftype = "nofile",
+        bufhidden = "wipe",
+        swapfile = false,
+        undolevels = -1
+    }
+    for k, v in pairs(buf_opts) do vim.bo[buf][k] = v end
+
+    -- Initial size calculations
+    local min_width = opts.default_width or 10
+    local max_width = math.floor(vim.o.columns * 0.8)
+    local initial_text = opts.default_text or ""
+    local current_width = math.max(min_width, #initial_text + 1)
+    current_width = math.min(current_width, max_width)
+
     local win = vim.api.nvim_open_win(buf, true, {
         relative = "cursor",
-        row = opts.row_offset,
-        col = opts.col_offset,
-        width = opts.width,
+        row = opts.row_offset or 1,
+        col = opts.col_offset or 0,
+        width = current_width,
         height = 1,
         style = "minimal",
         border = "rounded",
     })
+
     vim.wo[win].winhighlight = "Normal:Normal,NormalNC:Normal,EndOfBuffer:Normal,FloatBorder:Normal"
-    vim.api.nvim_set_current_win(win)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { opts.default })
-    vim.api.nvim_win_set_cursor(win, { 1, #opts.default })
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { initial_text })
+    vim.api.nvim_win_set_cursor(win, { 1, #initial_text })
+    
+    -- 1. AUTO-RESIZE LOGIC
+    vim.api.nvim_create_autocmd("TextChangedI", {
+        buffer = buf,
+        callback = function()
+            local line = vim.api.nvim_get_current_line()
+            local new_width = math.max(min_width, vim.fn.strwidth(line) + 1)
+            new_width = math.min(new_width, max_width)
+            
+            -- Only call API if width actually changed to save performance
+            if new_width ~= current_width then
+                current_width = new_width
+                vim.api.nvim_win_set_config(win, { width = current_width })
+            end
+        end,
+    })
+
     vim.cmd("startinsert!")
+
     local closed = false
     local function close(value)
         if closed then return end
         closed = true
         vim.cmd("stopinsert")
-        vim.api.nvim_set_current_win(prev_win)
         if vim.api.nvim_win_is_valid(win) then
             vim.api.nvim_win_close(win, true)
         end
+        if vim.api.nvim_win_is_valid(prev_win) then
+            vim.api.nvim_set_current_win(prev_win)
+        end
         vim.schedule(function() opts.on_confirm(value) end)
     end
-    -- Confirm on Enter
-    vim.keymap.set("i", "<CR>", function()
-        local line = vim.api.nvim_get_current_line()
-        close(line ~= "" and line or nil)
-    end, { buffer = buf, nowait = true })
-    -- Cancel on Esc in normal mode
-    vim.keymap.set("n", "<Esc>", function() close(nil) end, { buffer = buf, nowait = true })
+
+    -- Keybindings
+    local kopts = { buffer = buf, nowait = true }
+    vim.keymap.set("i", "<CR>", function() close(vim.api.nvim_get_current_line()) end, kopts)
+    vim.keymap.set("n", "<Esc>", function() close(nil) end, kopts)
+    vim.keymap.set("i", "<C-c>", function() close(nil) end, kopts)
+
     vim.api.nvim_create_autocmd("WinLeave", {
         once = true,
-        callback = function()
-            close(nil)
-        end,
+        callback = function() close(nil) end,
     })
 end
 
