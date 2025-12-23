@@ -88,4 +88,57 @@ function M.open_inspect_win(title, text)
     })
 end
 
+-- TODO: move this to a seperate module
+function M.input_at_cursor(opts)
+    local prev_win = vim.api.nvim_get_current_win()
+    -- Create scratch buffer
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].swapfile = false
+    vim.bo[buf].undolevels = -1
+    -- Cursor position
+    -- Floating window at current line
+    local win = vim.api.nvim_open_win(buf, true, {
+        relative = "cursor",
+        row = opts.row_offset,
+        col = opts.col_offset,
+        width = opts.width,
+        height = 1,
+        style = "minimal",
+        border = "rounded",
+    })
+    vim.wo[win].winhighlight = "Normal:Normal,NormalNC:Normal,EndOfBuffer:Normal,FloatBorder:Normal"
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { opts.default })
+    vim.api.nvim_win_set_cursor(win, { 1, #opts.default })
+    vim.cmd("normal! q")
+    vim.cmd("startinsert")
+    local closed = false
+    local function close(value)
+        if closed then return end
+        closed = true
+        vim.cmd("stopinsert")
+        vim.api.nvim_set_current_win(prev_win)
+        if vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_win_close(win, true)
+        end
+        vim.schedule(function() opts.on_confirm(value) end)
+    end
+    -- Confirm on Enter
+    vim.keymap.set("i", "<CR>", function()
+        local line = vim.api.nvim_get_current_line()
+        close(line ~= "" and line or nil)
+    end, { buffer = buf, nowait = true })
+    -- Cancel on Esc
+    vim.keymap.set("i", "<Esc>", function() close(nil) end, { buffer = buf, nowait = true })
+    vim.api.nvim_create_autocmd("WinLeave", {
+        once = true,
+        callback = function()
+            close(nil)
+        end,
+    })
+end
+
 return M

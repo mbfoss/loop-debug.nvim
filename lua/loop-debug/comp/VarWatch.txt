@@ -135,7 +135,7 @@ function VarWatch:link_to_buffer(comp)
         local cursor = vim.api.nvim_win_get_cursor(win)
         local col_offset = -cursor[2]
         local row_offset = 0
-        floating_input_at_cursor({
+        floatwin.input_at_cursor({
             row_offset = row_offset,
             col_offset = col_offset,
             width = 30,

@@ -33,59 +33,6 @@ local function _preview_string(str, max_len)
     return preview, true
 end
 
--- TODO: move this to a seperate module
-local function floating_input_at_cursor(opts)
-    local prev_win = vim.api.nvim_get_current_win()
-    -- Create scratch buffer
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[buf].buftype = "nofile"
-    vim.bo[buf].bufhidden = "wipe"
-    vim.bo[buf].buftype = "nofile"
-    vim.bo[buf].swapfile = false
-    vim.bo[buf].undolevels = -1
-    -- Cursor position
-    -- Floating window at current line
-    local win = vim.api.nvim_open_win(buf, true, {
-        relative = "cursor",
-        row = opts.row_offset,
-        col = opts.col_offset,
-        width = opts.width,
-        height = 1,
-        style = "minimal",
-        border = "rounded",
-    })
-    vim.wo[win].winhighlight = "Normal:Normal,NormalNC:Normal,EndOfBuffer:Normal,FloatBorder:Normal"
-    vim.api.nvim_set_current_win(win)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { opts.default })
-    vim.api.nvim_win_set_cursor(win, { 1, #opts.default })
-    vim.cmd("normal! q")
-    vim.cmd("startinsert")
-    local closed = false
-    local function close(value)
-        if closed then return end
-        closed = true
-        vim.cmd("stopinsert")
-        vim.api.nvim_set_current_win(prev_win)
-        if vim.api.nvim_win_is_valid(win) then
-            vim.api.nvim_win_close(win, true)
-        end
-        vim.schedule(function() opts.on_confirm(value) end)
-    end
-    -- Confirm on Enter
-    vim.keymap.set("i", "<CR>", function()
-        local line = vim.api.nvim_get_current_line()
-        close(line ~= "" and line or nil)
-    end, { buffer = buf, nowait = true })
-    -- Cancel on Esc
-    vim.keymap.set("i", "<Esc>", function() close(nil) end, { buffer = buf, nowait = true })
-    vim.api.nvim_create_autocmd("WinLeave", {
-        once = true,
-        callback = function()
-            close(nil)
-        end,
-    })
-end
-
 ---@param is_watch boolean
 ---@param sess_id? number
 ---@return string
@@ -298,22 +245,32 @@ end
 function Variables:link_to_buffer(comp)
     ItemTreeComp.link_to_buffer(self, comp)
 
-    --- Helper: edit an existing watch or add a new one
-    local function add_watch()
+    ---@param item loop.comp.ItemTree.Item|nil
+    local function add_or_edit_watch(item)
         local win = vim.api.nvim_get_current_win()
         local cursor = vim.api.nvim_win_get_cursor(win)
         local col_offset = -cursor[2]
         local row_offset = 0
-        floating_input_at_cursor({
+        local text
+        if item and item.data then text = item.data.name end
+        text = text or ""
+        floatwin.input_at_cursor({
             row_offset = row_offset,
             col_offset = col_offset,
-            width = 30,
-            default = "",
+            width = 60,
+            default = text,
             on_confirm = function(expr)
                 if not expr then return end
-                local added = watchexpr.add(expr)
-                if added then
-                    self:_load_watch_expr_value(expr)
+                if not item then
+                    local added = watchexpr.add(expr)
+                    if added then
+                        self:_load_watch_expr_value(expr)
+                    end
+                elseif item.data and item.data.name and expr ~= item.data.name then
+                    watchexpr.remove(item.data.name)
+                    watchexpr.add(expr)
+                    item.data.name = expr
+                    self:_load_watch_expr_value(expr, item.id)
                 end
             end
         })
@@ -322,9 +279,18 @@ function Variables:link_to_buffer(comp)
     -- Add keymaps
     comp.add_keymap("i", {
         desc = "Add watch (inline)",
-        callback = function() add_watch() end,
+        callback = function() add_or_edit_watch(nil) end,
     })
-
+    comp.add_keymap("c", {
+        desc = "Change watch expression",
+        callback = function()
+            ---@type loop.comp.ItemTree.Item|nil
+            local cur_item = self:get_cur_item(comp)
+            if not cur_item then return end
+            if not cur_item.data.is_expr then return end
+            add_or_edit_watch(cur_item)
+        end,
+    })
     comp.add_keymap("d", {
         desc = "Delete watch",
         callback = function()
@@ -353,11 +319,23 @@ function Variables:_upsert_watch_root()
 end
 
 ---@param expr string
-function Variables:_load_watch_expr_value(expr)
+---@param forced_id any
+function Variables:_load_watch_expr_value(expr, forced_id)
     local parent_id = self:_upsert_watch_root()
+    local exising_items = self:get_item_and_children(parent_id)
+    local item_id = forced_id
+    if not item_id then
+        for _, item in ipairs(exising_items) do
+            if item and item.data and expr == item.data.name then
+                item_id = item.id
+                break
+            end
+        end
+    end
+    item_id = item_id or {}
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
-        id = _make_node_id(parent_id, expr),
+        id = item_id,
         parent_id = parent_id,
         expanded = self._layout_cache[expr],
         data = { is_expr = true, name = expr }
