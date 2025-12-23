@@ -1,3 +1,5 @@
+local field_order = { "name", "type", "command", "cwd", "debugger", "request", "host", "port" }
+
 ---@type loop.taskTemplate[]
 return {
     -- ==================================================================
@@ -6,6 +8,7 @@ return {
     {
         name = "Debug current Lua file (local-lua-debugger-vscode)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             command = "${file:lua}",
@@ -17,6 +20,7 @@ return {
     {
         name = "Attach to remote Lua process",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "lua:remote",
@@ -31,6 +35,7 @@ return {
     {
         name = "Debug executable with LLDB (launch)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             command = "${prompt:Select binary: }",
@@ -44,6 +49,7 @@ return {
     {
         name = "Attach to running process (LLDB)",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "lldb",
@@ -57,6 +63,7 @@ return {
     {
         name = "Debug Node.js script (js-debug)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             command = "${file:javascript}",
@@ -70,6 +77,7 @@ return {
     {
         name = "Attach to Node.js process (js-debug)",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "js-debug",
@@ -85,6 +93,7 @@ return {
     {
         name = "Debug Python script (debugpy)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             command = "${file:python}",
@@ -97,6 +106,7 @@ return {
     {
         name = "Attach to Python debug server (debugpy)",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "debugpy:remote",
@@ -110,6 +120,7 @@ return {
     {
         name = "Debug Go program (delve)",
         task = {
+            __order = field_order,
             name = "Debug Go program (delve)",
             type = "debug",
             cwd = "${projdir}",
@@ -121,6 +132,7 @@ return {
     {
         name = "Attach to Go process (delve)",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "go",
@@ -135,6 +147,7 @@ return {
     {
         name = "Launch Chrome and debug",
         task = {
+            __order = field_order,
             name = "Launch",
             type = "debug",
             debugger = "chrome",
@@ -148,6 +161,7 @@ return {
     {
         name = "Attach to running Chrome",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "chrome",
@@ -162,6 +176,7 @@ return {
     {
         name = "Debug Bash script (bashdb)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             command = "${file}",
@@ -176,6 +191,7 @@ return {
     {
         name = "Listen for Xdebug (PHP)",
         task = {
+            __order = field_order,
             name = "Listen",
             type = "debug",
             debugger = "php",
@@ -190,6 +206,7 @@ return {
     {
         name = "Debug .NET DLL (netcoredbg)",
         task = {
+            __order = field_order,
             name = "Debug",
             type = "debug",
             debugger = "netcoredbg",
@@ -200,6 +217,7 @@ return {
     {
         name = "Attach to .NET process",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "netcoredbg",
@@ -213,6 +231,7 @@ return {
     {
         name = "Attach to Java process (JDWP)",
         task = {
+            __order = field_order,
             name = "Attach",
             type = "debug",
             debugger = "java",

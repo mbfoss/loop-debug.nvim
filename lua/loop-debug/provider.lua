@@ -20,12 +20,6 @@ local task_provider =
             debugui.set_layout_config(state.uilayout)
         end
     end,
-    get_config_schema = function()
-        return nil
-    end,
-    get_config_template = function()
-        return nil
-    end,
     get_task_schema = function()
         local schema = require('loop-debug.schema')
         return schema
