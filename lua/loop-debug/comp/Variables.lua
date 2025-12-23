@@ -277,14 +277,6 @@ function Variables:init()
         render_delay_ms = 300,
     })
 
-    ---@type loop.comp.ItemTree.Item
-    local root_item = {
-        id = _get_root_id(true),
-        expanded = true,
-        data = { scopelabel = "Watch" }
-    }
-    self:upsert_item(root_item)
-
     ---@type loopdebug.comp.Vars.DataSource|nil
     self._current_data_source = nil
 
@@ -347,9 +339,22 @@ function Variables:link_to_buffer(comp)
     })
 end
 
+---@return any root_id
+function Variables:_upsert_watch_root()
+    local id = _get_root_id(true)
+    ---@type loop.comp.ItemTree.Item
+    local root_item = {
+        id = id,
+        expanded = true,
+        data = { scopelabel = "Watch" }
+    }
+    self:upsert_item(root_item)
+    return id
+end
+
 ---@param expr string
 function Variables:_load_watch_expr_value(expr)
-    local parent_id = _get_root_id(true)
+    local parent_id = self:_upsert_watch_root()
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = _make_node_id(parent_id, expr),
@@ -402,6 +407,7 @@ function Variables:update_data(sess_id, sess_name, data_providers, frame)
         data_providers = data_providers,
         frame = frame,
     }
+    self:_upsert_watch_root() -- ensure this exists at the top
     self:_load_watch_expressions()
     self:_load_session_vars()
 end

@@ -48,7 +48,7 @@ function M.toggle()
     local managed = get_managed_windows()
 
     if #managed > 0 then
-        vim.api.nvim_del_autocmd(_ui_auto_group)
+        vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
         if _manager_tracker_id then
             manager.remove_tracker(_manager_tracker_id)
             _manager_tracker_id = nil
@@ -67,7 +67,7 @@ function M.toggle()
     vim.api.nvim_win_set_width(top_win, _layout_config.width)
 
     -- 2. Create the Horizontal split
-    vim.cmd("split")
+    vim.cmd("below split")
     local bottom_win = vim.api.nvim_get_current_win()
 
     -- 3. Restore Height with validation
@@ -107,7 +107,7 @@ function M.toggle()
         vim.api.nvim_set_current_win(original_win)
     end
 
-    vim.api.nvim_del_autocmd(_ui_auto_group)
+    vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
     vim.api.nvim_create_autocmd("WinResized", {
         group = _ui_auto_group,
         callback = function()
