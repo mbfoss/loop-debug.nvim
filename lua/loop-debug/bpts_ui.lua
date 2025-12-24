@@ -229,7 +229,7 @@ function M.breakpoints_command(command)
     assert(_init_done, _init_err_msg)
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
-        vim.notify('No active wsect')
+        vim.notify('No active workspace')
         return
     end
     command = command and command:match("^%s*(.-)%s*$") or ""

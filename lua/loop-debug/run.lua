@@ -63,7 +63,7 @@ function M.start_debug_task(task, page_manager, on_exit)
 
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
-        return nil, "failed to read wsect dir"
+        return nil, "failed to read workspace dir"
     end
 
     ---- debug adapter config ---
