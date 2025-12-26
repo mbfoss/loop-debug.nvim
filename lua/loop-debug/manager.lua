@@ -319,7 +319,8 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
                 data_providers.completion_provider({
                     text = input,
                     column = #input + 1,
-                }, function(_, data)
+                    frameId = session_data.cur_frame and session_data.cur_frame.id or nil,
+                }, function(compl_err, data)
                     if data then
                         local strs = {}
                         for _, item in ipairs(data.targets or {}) do
@@ -328,7 +329,7 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
                         end
                         callback(strs)
                     else
-                        callback({})
+                        callback(nil, compl_err)
                     end
                 end)
             end)
