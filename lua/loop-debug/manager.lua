@@ -247,7 +247,7 @@ local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
                 end
                 sess_data.thread_names = {}
                 for _, thread in pairs(resp.threads) do
-                    sess_data.thread_names[thread_id] = thread.name
+                    sess_data.thread_names[thread.id] = thread.name
                 end
                 _switch_to_thread(jobdata, sess_id, thread_id)
             end

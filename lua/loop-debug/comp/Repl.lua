@@ -30,7 +30,6 @@ function ReplComp:link_to_buffer(buf_ctrl)
 
     -- REPL output is passive
     buf_ctrl:disable_change_events()
-    buf_ctrl:follow_last_line()
 
     self:_setup_keymaps(buf_ctrl)
 end
