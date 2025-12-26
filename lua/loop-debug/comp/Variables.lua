@@ -241,7 +241,7 @@ function Variables:init()
     self:_load_watch_expressions()
 end
 
----@param comp loop.BufferController
+---@param comp loop.CompBufferController
 function Variables:link_to_buffer(comp)
     ItemTreeComp.link_to_buffer(self, comp)
 

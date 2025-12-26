@@ -1,7 +1,7 @@
 local M                   = {}
 
 local manager             = require('loop-debug.manager')
-local CompBuffer          = require('loop.comp.CompBuffer')
+local CompBuffer          = require('loop.buf.CompBuffer')
 local VariablesComp       = require('loop-debug.comp.Variables')
 local StackTraceComp      = require('loop-debug.comp.StackTrace')
 
@@ -87,8 +87,11 @@ function M.toggle()
     local vars_buffer = CompBuffer:new("debugvars", "Variables")
     local stack_buffer = CompBuffer:new("callstack", "Call Stack")
 
-    vim.api.nvim_win_set_buf(top_win, vars_buffer:get_or_create_buf())
-    vim.api.nvim_win_set_buf(bottom_win, stack_buffer:get_or_create_buf())
+    local vars_buf = vars_buffer:get_or_create_buf()
+    local stack_buf = stack_buffer:get_or_create_buf()
+    
+    vim.api.nvim_win_set_buf(top_win, vars_buf)
+    vim.api.nvim_win_set_buf(bottom_win, stack_buf)
 
     for win, type_name in pairs(config_map) do
         -- Visuals

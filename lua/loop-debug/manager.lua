@@ -3,7 +3,6 @@ local signs           = require('loop-debug.signs')
 local filetools       = require('loop.tools.file')
 local ItemListComp    = require('loop.comp.ItemList')
 local OutputLinesComp = require('loop.comp.OutputLines')
-local ReplComp        = require('loop-debug.comp.Repl')
 local uitools         = require('loop.tools.uitools')
 local notifications   = require('loop.notifications')
 local selector        = require('loop.tools.selector')
@@ -23,7 +22,7 @@ local M               = {}
 ---@field thread_names table<number,string>
 ---@field cur_thread_id number|nil
 ---@field cur_frame loopdebug.proto.StackFrame|nil
----@field repl_comp loop.comp.ReplComp|nil
+---@field repl_ctrl loop.ReplController|nil
 ---@field debuggee_output_comp loop.comp.OutputLines|nil
 
 ---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
@@ -36,6 +35,7 @@ local M               = {}
 ---@field current_session_id number|nil
 ---@field session_data table<number,loopdebug.mgr.SessionData>
 ---@field sessionlist_comp loop.comp.ItemList
+---@field sessionlist_page loop.PageController
 ---@field command_fn loopdebug.mgr.JobCommandFn
 
 ---@class loopdebug.mgr.JobUpdateEvent
@@ -65,6 +65,14 @@ local _page_groups    = {
     repl = "repl",
 }
 
+local _ansi_colors    = {
+    RESET = "\27[0m",
+    BOLD  = "\27[1m",
+    GREEN = "\27[32m",
+    BLUE  = "\27[34m",
+    RED   = "\27[31m",
+    CYAN  = "\27[36m",
+}
 
 ---@param single_target loopdebug.mgr.DebugTracker|nil
 local function _send_job_udpate_event(single_target)
@@ -177,7 +185,7 @@ local function _refresh_task_page(jobdata)
         }
         local symbols = config.current.symbols
         jobdata.sessionlist_comp:set_items({ item })
-        jobdata.sessionlist_comp:set_ui_flags(jobdata.job_success and '' or symbols.failure)
+        jobdata.sessionlist_page.set_ui_flags(jobdata.job_success and '' or symbols.failure)
         return
     end
 
@@ -214,7 +222,7 @@ local function _refresh_task_page(jobdata)
 
     jobdata.sessionlist_comp:set_items(list_items)
     jobdata.sessionlist_comp:set_current_item_by_id(jobdata.current_session_id)
-    jobdata.sessionlist_comp:set_ui_flags(uiflags)
+    jobdata.sessionlist_page.set_ui_flags(uiflags)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -286,11 +294,28 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
         repl_page_group = jobdata.page_manager.add_page_group(_page_groups.repl, "Debug Console")
     end
     if repl_page_group then
-        local page = repl_page_group.add_page(tostring(sess_id), sess_name)
-        if page then
-            session_data.repl_comp = ReplComp:new(data_providers)
-            session_data.repl_comp:link_to_buffer(page)
-            session_data.repl_comp:set_data_providers(data_providers)
+        local page_data, err = repl_page_group.add_page({
+            id = tostring(sess_id),
+            type = "repl_buf",
+            label = sess_name,
+            buftype = "repl",
+            activate = false
+        })
+        if page_data then
+            session_data.repl_ctrl = page_data.repl_buf
+            session_data.repl_ctrl.set_input_handler(function(input)
+                data_providers.evaluate_provider({
+                    expression = input,
+                    context = "repl",
+                }, function(eval_err, data)
+                    if not data then
+                        local msg = eval_err and eval_err or "Evaluation error"
+                        session_data.repl_ctrl.add_output(_ansi_colors.RED .. msg .. _ansi_colors.RESET)
+                    else
+                        session_data.repl_ctrl.add_output(tostring(data.result))
+                    end
+                end)
+            end)
         end
     end
 end
@@ -533,20 +558,13 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
     local sess_data = jobdata.session_data[sess_id]
     assert(sess_data, "missing session data")
 
-    ---@type loop.comp.output.Highlight[]|nil
-    local highlights = nil
-    if category == "stderr" then
-        highlights = {
-            { group = "ErrorMsg" }
-        }
-    end
 
     local is_repl = (category ~= "stdout" and category ~= "stderr")
     if is_repl then
-        if sess_data.repl_comp then
+        if sess_data.repl_ctrl then
             for line in output:gmatch("([^\r\n]*)\r?\n?") do
                 if line ~= "" then
-                    sess_data.repl_comp:print(output, highlights)
+                    sess_data.repl_ctrl.add_output(line)
                 end
             end
         end
@@ -560,20 +578,32 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
         if not page_group then
             page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
         end
-        local page
+        local page_data
         if page_group then
-            page = page_group.get_page_controller(tostring(sess_id))
+            page_data = page_group.get_page(tostring(sess_id))
         end
-        if not page and page_group then
-            page = page_group.add_page(tostring(sess_id), sess_name, true)
+        if not page_data and page_group then
+            page_data = page_group.add_page({
+                id = tostring(sess_id),
+                type = "comp_buf",
+                buftype = "output",
+                label = sess_name,
+            })
         end
-        if page then
+        if page_data then
             output_comp = OutputLinesComp:new()
-            output_comp:link_to_buffer(page)
+            output_comp:link_to_buffer(page_data.comp_buf)
             sess_data.debuggee_output_comp = output_comp
         end
     end
     if output_comp then
+        ---@type loop.comp.output.Highlight[]|nil
+        local highlights = nil
+        if category == "stderr" then
+            highlights = {
+                { group = "ErrorMsg" }
+            }
+        end
         for line in output:gmatch("([^\r\n]*)\r?\n?") do
             if line ~= "" then
                 output_comp:add_line(line, highlights)
@@ -597,22 +627,29 @@ local function _on_session_new_term_req(jobdata, name, args, cb)
     }
 
     ---@diagnostic disable-next-line: undefined-field
-    local page_id = "term." .. name .. vim.loop.hrtime()
+    local page_id = "term." .. name .. string.format("%d", vim.loop.hrtime())
     local page_group = jobdata.page_manager.get_page_group(_page_groups.output)
     if not page_group then
         page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
     end
-    local proc, proc_err
-    if page_group then
-        proc, proc_err = page_group.add_term_page(page_id, start_args, true)
-    else
-        proc_err = "ui not available"
+    if not page_group then
+        cb(nil, "UI not available")
+        return
     end
+    local page_data, err_msg = page_group.add_page({
+        id = page_id,
+        type = "term",
+        buftype = "term",
+        label = "Debug Server",
+        term_args = start_args,
+        activate = true,
+    })
+    local proc = page_data and page_data.term_proc or nil
     if proc then
         cb(proc:get_pid(), nil)
     else
-        cb(nil, proc_err or "term err")
-        notifications.notify("failed to started debugged process - " .. proc_err)
+        cb(nil, err_msg or "term err")
+        notifications.notify("failed to started debugged process - " .. err_msg)
     end
 end
 
@@ -676,10 +713,15 @@ function M.track_new_debugjob(task_name, page_manager)
         show_current_prefix = true,
     })
 
-    local tasks_page = page_manager.add_page_group(_page_groups.task, "Debug Sessions").add_page("sessions", "Sessions",
-        true)
-    assert(tasks_page)
-    sessionlist_comp:link_to_buffer(tasks_page)
+    local page_data = page_manager.add_page_group(_page_groups.task, "Debug Sessions").add_page({
+        id = "sessions",
+        type = "comp_buf",
+        buftype = "sessions",
+        label = "Debug Sessions",
+        activate = true,
+    })
+    assert(page_data)
+    sessionlist_comp:link_to_buffer(page_data.comp_buf)
 
     ---@type loopdebug.mgr.DebugJobData
     local jobdata = {
@@ -687,6 +729,7 @@ function M.track_new_debugjob(task_name, page_manager)
         page_manager = page_manager,
         session_data = {},
         sessionlist_comp = sessionlist_comp,
+        sessionlist_page = page_data.page,
         command_fn = function() return false end,
     }
 

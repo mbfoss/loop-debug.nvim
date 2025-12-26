@@ -208,8 +208,20 @@ debuggers["js-debug"] = {
                 end
             end
         }
-        local proc = context.page_manager.add_page_group("nodejs_server", "Server").add_term_page("srv", args)
-        context.user_data.proc = proc
+
+        local page_group = context.page_manager.add_page_group("nodejs_server", "Debug Server")
+        if not page_group then return end
+
+        local page_data, err_msg = page_group.add_page({
+            id = "term",
+            type = "term",
+            buftype = "term",
+            label = "Debug Server",
+            term_args = args,
+            activate = true,
+        })
+
+        context.user_data.proc = page_data and page_data.term_proc or nil
     end,
     end_hook = function(context, callabck)
         ---@type loop.tools.TermProc
