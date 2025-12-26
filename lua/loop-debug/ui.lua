@@ -91,16 +91,16 @@ function M.toggle()
     vim.api.nvim_win_set_buf(bottom_win, stack_buffer:get_or_create_buf())
 
     for win, type_name in pairs(config_map) do
+        -- Visuals
+        vim.wo[win].wrap = false
+        vim.wo[win].spell = false
         -- WinVars
         vim.w[win][KEY_MARKER] = true
         vim.w[win][KEY_TYPE] = type_name
         -- Constraints
         vim.wo[win].winfixbuf = true
         vim.wo[win].winfixwidth = true
-        -- Enable winfixheight so the horizontal split doesn't jump
-        -- when other windows are opened/closed
         vim.wo[win].winfixheight = true
-        vim.wo[win].winfixwidth = true
     end
 
     if vim.api.nvim_win_is_valid(original_win) then

@@ -86,7 +86,7 @@ local function _variable_node_formatter(id, data, highlights)
     local name = data.name and tostring(data.name) or "unknown"
     local value = data.value and tostring(data.value) or ""
     value = daptools.format_variable(value, hint)
-    local preview, is_different = _preview_string(value, 30)
+    local preview, is_different = _preview_string(value, vim.o.columns)
     if is_different then preview = vim.fn.trim(preview, "", 2) end
     local text = name .. ": " .. preview
     if is_different then text = text .. "…" end

@@ -128,10 +128,6 @@ local function _switch_to_frame(jobdata, frame)
     local thread_id = session_data.cur_thread_id
     if not thread_id then return end
 
-    ---@type loopdebug.session.DataProviders
-    local data_providers = session_data.data_providers
-    local sess_name = session_data.sess_name or tostring(sess_id)
-
     session_data.cur_frame = frame
     _jump_to_frame(frame)
 
