@@ -12,11 +12,23 @@ local Trackers       = require("loop.tools.Trackers")
 
 local M              = {}
 
+---@class loopdebug.mgr.Context
+---@field session_ctx number
+---@field pause_ctx number
+---@field thread_ctx number
+---@field frame_ctx number
+
+---@class loopdebug.mgr.InSessionCtx
+---@field pause_ctx number
+---@field thread_ctx number
+---@field frame_ctx number
+
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
+---@field context_keys loopdebug.mgr.InSessionCtx
 ---@field paused_threads table<number,boolean>
 ---@field thread_names table<number,string>
 ---@field cur_thread_id number|nil
@@ -31,6 +43,7 @@ local M              = {}
 ---@field job_ended boolean|nil
 ---@field job_success boolean|nil
 ---@field page_manager loop.PageManager
+---@field session_ctx number
 ---@field current_session_id number|nil
 ---@field session_data table<number,loopdebug.mgr.SessionData>
 ---@field sessionlist_comp loop.comp.ItemList
@@ -114,6 +127,74 @@ function M.remove_tracker(id)
     return _trackers:remove_tracker(id)
 end
 
+---@param job_data loopdebug.mgr.DebugJobData
+---@return loopdebug.mgr.Context
+local function _build_context(job_data)
+    local sess_id = job_data.current_session_id
+    local sess_data = sess_id and job_data.session_data[sess_id] or nil
+    local sess_ctx = sess_data and sess_data.context_keys or nil
+    ---@type loopdebug.mgr.Context
+    local ctx = {
+        session_ctx = job_data.session_ctx,
+        pause_ctx = sess_ctx and sess_ctx.pause_ctx or 0,
+        thread_ctx = sess_ctx and sess_ctx.thread_ctx or 0,
+        frame_ctx = sess_ctx and sess_ctx.frame_ctx or 0,
+    }
+    return ctx
+end
+
+---@param job_data loopdebug.mgr.DebugJobData
+---@param level "session"|"pause"|"thread"|"frame"
+local function _increment_context(job_data, level)
+    local sess_id = job_data.current_session_id
+    local sess_data = sess_id and job_data.session_data[sess_id] or nil
+    if level == "session" then
+        job_data.session_ctx = job_data.session_ctx + 1
+    else
+        if not sess_data then return end
+        local ctx = sess_data.context_keys
+        if level == "pause" then
+            ctx.pause_ctx = ctx.pause_ctx + 1
+        elseif level == "thread" then
+            ctx.thread_ctx = ctx.thread_ctx + 1
+        elseif level == "frame" then
+            ctx.frame_ctx = ctx.frame_ctx + 1
+        else
+            assert(false)
+        end
+    end
+end
+
+---@param job_data loopdebug.mgr.DebugJobData
+---@param ctx loopdebug.mgr.Context
+---@param level "session"|"pause"|"thread"|"frame"
+local function _is_current_context(job_data, ctx, level)
+    local sess_id = job_data.current_session_id
+    local sess_data = sess_id and job_data.session_data[sess_id] or nil
+    local cur_ctx = sess_data and sess_data.context_keys or nil
+    if level == "session" then
+        return ctx.session_ctx == job_data.session_ctx
+    elseif level == "pause" then
+        return cur_ctx
+            and ctx.session_ctx == job_data.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
+    elseif level == "thread" then
+        return cur_ctx
+            and ctx.session_ctx == job_data.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
+            and ctx.thread_ctx == cur_ctx.thread_ctx
+    elseif level == "frame" then
+        return cur_ctx
+            and ctx.session_ctx == job_data.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
+            and ctx.thread_ctx == cur_ctx.thread_ctx
+            and ctx.frame_ctx == cur_ctx.frame_ctx
+    else
+        assert(false)
+    end
+    return false
+end
+
 ---@param frame loopdebug.proto.StackFrame
 function _jump_to_frame(frame)
     if not (frame and frame.source and frame.source.path) then return end
@@ -122,52 +203,6 @@ function _jump_to_frame(frame)
     uitools.smart_open_file(frame.source.path, frame.line, frame.column)
     -- Place sign for current frame
     signs.place_file_sign(1, frame.source.path, frame.line, "currentframe", "currentframe")
-end
-
----@param jobdata loopdebug.mgr.DebugJobData
----@param frame loopdebug.proto.StackFrame
-local function _switch_to_frame(jobdata, frame)
-    local sess_id = jobdata.current_session_id
-    if not sess_id then return end
-
-    local session_data = jobdata.session_data[sess_id]
-    if not session_data then return end
-    local thread_id = session_data.cur_thread_id
-    if not thread_id then return end
-
-    session_data.cur_frame = frame
-    _jump_to_frame(frame)
-
-    _send_job_udpate_event()
-end
-
----@param jobdata loopdebug.mgr.DebugJobData
----@param sess_id number
----@param thread_id number
-local function _switch_to_thread(jobdata, sess_id, thread_id)
-    if not sess_id or not thread_id then return end
-
-    local sess_data = jobdata.session_data[sess_id]
-    if not sess_data then return end
-
-    sess_data.cur_thread_id = thread_id
-    sess_data.cur_frame = nil
-
-    local data_providers = sess_data.data_providers
-
-    local topframe
-    -- handle current frame
-    data_providers.stack_provider({ threadId = thread_id, levels = 1 }, function(err, data)
-        ---@type loopdebug.proto.StackFrame
-        topframe = data and data.stackFrames[1] or nil
-        if topframe and topframe.source and topframe.source.path then
-            --- check if it did not change meanwhile
-            if sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
-                sess_data.cur_frame = topframe
-                _switch_to_frame(jobdata, topframe)
-            end
-        end
-    end)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -225,43 +260,123 @@ local function _refresh_task_page(jobdata)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
+---@param frame loopdebug.proto.StackFrame?
+---@param send_updates boolean
+local function _switch_to_frame(jobdata, frame, send_updates)
+    if not frame then return end
+
+    local sess_id = jobdata.current_session_id
+    if not sess_id then return end
+
+    local session_data = jobdata.session_data[sess_id]
+    if not session_data then return end
+
+    _increment_context(jobdata, "frame")
+
+    if not frame then
+        session_data.cur_frame = nil
+        signs.remove_signs("currentframe")
+        if send_updates then _send_job_udpate_event() end
+        return
+    end
+
+    session_data.cur_frame = frame
+    _jump_to_frame(frame)
+    if send_updates then _send_job_udpate_event() end
+end
+
+
+---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
----@param thread_pause_evt? loopdebug.session.notify.ThreadsEventScope|nil
-local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
+---@param thread_id number?
+---@param send_updates boolean
+local function _switch_to_thread(jobdata, sess_id, thread_id, send_updates)
+    if not sess_id then return end
+
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
+    _increment_context(jobdata, "thread")
+
+    _switch_to_frame(jobdata, nil, false)
+
+    if not thread_id then
+        sess_data.cur_thread_id = nil
+        if send_updates then _send_job_udpate_event() end
+        return
+    end
+
+    sess_data.cur_thread_id = thread_id
+    local data_providers = sess_data.data_providers
+    if send_updates then _send_job_udpate_event() end
+
+    local ctx = _build_context(jobdata)
+    local topframe
+
+    -- request current frame
+    data_providers.stack_provider({ threadId = thread_id, levels = 1 }, function(err, data)
+        if _is_current_context(jobdata, ctx, "thread") then
+            ---@type loopdebug.proto.StackFrame
+            topframe = data and data.stackFrames[1] or nil
+            sess_data.cur_frame = topframe
+            _switch_to_frame(jobdata, topframe, true)
+        end
+    end)
+end
+
+---@param jobdata loopdebug.mgr.DebugJobData
+---@param sess_id number?
+---@param thread_pause_evt? loopdebug.session.notify.ThreadsEventScope|nil
+local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
+    _increment_context(jobdata, "session")
+
+    _switch_to_thread(jobdata, jobdata.current_session_id, nil, false)
+
+    local sess_data = sess_id and jobdata.session_data[sess_id] or nil
+    if not sess_id or not sess_data then
+        _send_job_udpate_event()
+        _refresh_task_page(jobdata)
+        return
+    end
+
     jobdata.current_session_id = sess_id
+    _send_job_udpate_event()
 
     local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
-    if not thread_id then return end
+    if not thread_id then
+        _refresh_task_page(jobdata)
+        return
+    end
 
     if thread_pause_evt then
         if not thread_pause_evt.all_thread then
             sess_data.paused_threads[thread_pause_evt.thread_id] = true
             _refresh_task_page(jobdata)
         end
+        local ctx = _build_context(jobdata)
         sess_data.data_providers.threads_provider(function(err, resp)
-            if err or not resp or not resp.threads then
-                notifications.notify("Failed to load thread list - " .. (err or ""))
-            elseif sess_id == jobdata.current_session_id then
-                if thread_pause_evt.all_thread then
-                    sess_data.paused_threads = {}
-                    for _, thread in pairs(resp.threads) do
-                        sess_data.paused_threads[thread.id] = true
+            if _is_current_context(jobdata, ctx, "pause") then
+                if err or not resp or not resp.threads then
+                    notifications.notify("Failed to load thread list - " .. (err or ""))
+                else
+                    if thread_pause_evt.all_thread then
+                        sess_data.paused_threads = {}
+                        for _, thread in pairs(resp.threads) do
+                            sess_data.paused_threads[thread.id] = true
+                        end
+                        _refresh_task_page(jobdata)
                     end
-                    _refresh_task_page(jobdata)
+                    sess_data.thread_names = {}
+                    for _, thread in pairs(resp.threads) do
+                        sess_data.thread_names[thread.id] = thread.name
+                    end
+                    _switch_to_thread(jobdata, sess_id, thread_id, true)
                 end
-                sess_data.thread_names = {}
-                for _, thread in pairs(resp.threads) do
-                    sess_data.thread_names[thread.id] = thread.name
-                end
-                _switch_to_thread(jobdata, sess_id, thread_id)
             end
         end)
     else
         _refresh_task_page(jobdata)
-        _switch_to_thread(jobdata, sess_id, thread_id)
+        _switch_to_thread(jobdata, sess_id, thread_id, true)
     end
 end
 
@@ -278,6 +393,7 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
         sess_name = sess_name,
         controller = controller,
         data_providers = data_providers,
+        context_keys = { pause_ctx = 1, thread_ctx = 1, frame_ctx = 1 },
         paused_threads = {},
         thread_names = {}
     }
@@ -319,7 +435,7 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
                 data_providers.completion_provider({
                     text = input,
                     column = #input + 1,
-                    frameId = session_data.cur_frame and session_data.cur_frame.id or nil,
+                    frameId = session_data.cur_frame and session_data.cur_frame.id or nil, --no context check needed here
                 }, function(compl_err, data)
                     if data then
                         local strs = {}
@@ -395,22 +511,25 @@ local function _process_select_thread_command(jobdata)
         return false, "No active debug session"
     end
 
+    local ctx = _build_context(jobdata)
     sess_data.data_providers.threads_provider(function(err, data)
-        if err or not data or not data.threads then
-            notifications.notify("Failed to load thread list - " .. (err or ""))
-        elseif sess_id == jobdata.current_session_id then
-            local choices = {}
-            for _, thread in pairs(data.threads) do
-                ---@type loop.SelectorItem
-                local item = { label = tostring(thread.id) .. ": " .. tostring(thread.name), data = thread.id }
-                table.insert(choices, item)
-            end
-            selector.select("Select thread", choices, nil, function(thread_id)
-                -- ensure session did not change meanwhile
-                if thread_id and sess_id == jobdata.current_session_id then
-                    _switch_to_thread(jobdata, sess_id, thread_id)
+        if _is_current_context(jobdata, ctx, "pause") then
+            if err or not data or not data.threads then
+                notifications.notify("Failed to load thread list - " .. (err or ""))
+            else
+                local choices = {}
+                for _, thread in pairs(data.threads) do
+                    ---@type loop.SelectorItem
+                    local item = { label = tostring(thread.id) .. ": " .. tostring(thread.name), data = thread.id }
+                    table.insert(choices, item)
                 end
-            end)
+                selector.select("Select thread", choices, nil, function(thread_id)
+                    -- ensure session did not change meanwhile
+                    if thread_id and sess_id == jobdata.current_session_id then
+                        _switch_to_thread(jobdata, sess_id, thread_id, true)
+                    end
+                end)
+            end
         end
     end)
     return true
@@ -432,23 +551,26 @@ local function _process_select_frame_command(jobdata)
         return false, "No selected thread"
     end
 
+    local ctx = _build_context(jobdata)
     sess_data.data_providers.stack_provider({ threadId = sess_data.cur_thread_id }, function(err, data)
-        if err or not data then
-            notifications.notify("Failed to load call stack - " .. (err or ""))
-        elseif sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
-            local choices = {}
-            for _, frame in pairs(data.stackFrames) do
-                ---@type loop.SelectorItem
-                local item = { label = tostring(frame.name), data = frame }
-                table.insert(choices, item)
-            end
-            selector.select("Select frame", choices, nil, function(frame)
-                -- ensure if's still the same session and thread
-                if frame and sess_id == jobdata.current_session_id
-                    and thread_id == sess_data.cur_thread_id then
-                    _switch_to_frame(jobdata, frame)
+        if _is_current_context(jobdata, ctx, "thread") then
+            if err or not data then
+                notifications.notify("Failed to load call stack - " .. (err or ""))
+            else
+                local choices = {}
+                for _, frame in pairs(data.stackFrames) do
+                    ---@type loop.SelectorItem
+                    local item = { label = tostring(frame.name), data = frame }
+                    table.insert(choices, item)
                 end
-            end)
+                selector.select("Select frame", choices, nil, function(frame)
+                    -- ensure if's still the same session and thread
+                    if frame and sess_id == jobdata.current_session_id
+                        and thread_id == sess_data.cur_thread_id then
+                        _switch_to_frame(jobdata, frame, true)
+                    end
+                end)
+            end
         end
     end)
 
@@ -476,16 +598,19 @@ local function _process_inspect_var_command(jobdata)
         return false, expr_err or "No text under the cursor"
     end
     local frame = sess_data.cur_frame
+    local ctx = _build_context(jobdata)
     sess_data.data_providers.evaluate_provider({
         expression = expr,
         context = "watch",
         frameId = frame and frame.id or nil
     }, function(err, data)
-        if data and data.result then
-            floatwin.open_inspect_win(expr, daptools.format_variable(data.result, data.presentationHint))
-        else
-            err = err or "not available"
-            floatwin.open_inspect_win("Error", err)
+        if _is_current_context(jobdata, ctx, "frame") then
+            if data and data.result then
+                floatwin.open_inspect_win(expr, daptools.format_variable(data.result, data.presentationHint))
+            else
+                err = err or "not available"
+                floatwin.open_inspect_win("Error", err)
+            end
         end
     end)
     return true
@@ -556,14 +681,11 @@ local function _on_session_state_update(jobdata, sess_id, sess_name, data)
     local session_data = jobdata.session_data[sess_id]
     if not session_data then return end
     session_data.state = data.state
-    if sess_id == jobdata.current_session_id and data.state == "ended" then
-        signs.remove_signs("currentframe")
-        jobdata.current_session_id = nil
+    if data.state == "ended" then
         session_data.cur_thread_id = nil
         session_data.cur_frame = nil
+        _switch_to_session(jobdata, nil)
     end
-    _refresh_task_page(jobdata)
-    _send_job_udpate_event()
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
@@ -702,20 +824,20 @@ local function _on_session_thread_continue(jobdata, sess_id, sess_name, event_da
         notifications.notify("Unexpected session pause event")
         return
     end
-
-    signs.remove_signs("currentframe")
     session_data.cur_frame = nil
     if event_data.all_thread then
+        _increment_context(jobdata, "pause")
         session_data.paused_threads = {}
-        session_data.cur_thread_id = nil
+        _switch_to_thread(jobdata, sess_id, nil, true)
     else
+        _increment_context(jobdata, "thread")
         session_data.paused_threads[event_data.thread_id] = nil
         if session_data.cur_thread_id == event_data.thread_id then
-            session_data.cur_thread_id = nil
+            _switch_to_thread(jobdata, sess_id, nil, true)
+        else
+            _refresh_task_page(jobdata) -- for paused thread count
         end
     end
-    _refresh_task_page(jobdata)
-    _send_job_udpate_event()
 end
 
 ---@param task_name string -- task name
@@ -743,6 +865,7 @@ function M.track_new_debugjob(task_name, page_manager)
     local jobdata = {
         jobname = task_name,
         page_manager = page_manager,
+        session_ctx = 1,
         session_data = {},
         sessionlist_comp = sessionlist_comp,
         sessionlist_page = page_data.page,

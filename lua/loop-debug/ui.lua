@@ -149,7 +149,7 @@ function M.toggle()
                 variables_comp:greyout_content(update.session_id)
             end
             if update.data_providers and update.cur_thread_id then
-                stacktrace_comp:set_content(update.data_providers, update.cur_thread_id, update.cur_thread_name)
+                stacktrace_comp:update_data(update.data_providers, update.cur_thread_id, update.cur_thread_name)
             else
                 stacktrace_comp:greyout_content()
             end

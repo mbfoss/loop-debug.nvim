@@ -81,6 +81,9 @@ function StackTrace:init()
         formatter = _item_formatter,
     })
 
+    ---@type number
+    self._query_context = 0
+
     self._frametrackers = Trackers:new()
     self:add_tracker({
         on_selection = function(id, data)
@@ -108,13 +111,16 @@ end
 ---@param data loopdebug.session.DataProviders
 ---@param thread_id number
 ---@param thread_name string|nil
-function StackTrace:set_content(data, thread_id, thread_name)
+function StackTrace:update_data(data, thread_id, thread_name)
+    self._query_context = self._query_context + 1
+    local context = self._query_context
     data.stack_provider({
             threadId = thread_id,
             levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
-            local text = "Thread: " ..(thread_name or tostring(thread_id))
+            if context ~= self._query_context then return end
+            local text = "Thread: " .. (thread_name or tostring(thread_id))
             local items = { {
                 id = 0,
                 data = { text = text, thread_data = data }

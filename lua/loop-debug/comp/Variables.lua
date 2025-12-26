@@ -29,10 +29,10 @@ local function _preview_string(str, max_len)
     end
     if #str < max_len then
         -- replace newlines
-        preview = preview:gsub("\n", "⏎")
+        preview = str:gsub("\n", "⏎")
         return preview, true
     end
-    local preview = str:sub(1, max_len)
+    local preview = str:sub(1, max_len):gsub("\n", "⏎")
     preview = vim.fn.trim(preview, "", 2) .. "…"
     return preview, true
 end
@@ -89,30 +89,27 @@ local function _variable_node_formatter(id, data, highlights)
     local hint = data.presentationHint
     local name = data.name and tostring(data.name) or "unknown"
     local value = data.value and tostring(data.value) or ""
+
     value = daptools.format_variable(value, hint)
-    local preview, _ = _preview_string(value, vim.o.columns)
-    if data.greyout then
-        table.insert(highlights, { group = "NonText" })
+    local preview, is_different = _preview_string(value, vim.o.columns)
+    table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
+    if data.is_na or data.greyout then
+        table.insert(highlights, { group = "NonText", start_col = #name })
     else
-        table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
-        if data.is_na then
-            table.insert(highlights, { group = "NonText", start_col = #name })
-        else
-            local start_col = #name
-            local end_col = start_col + 2
-            table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
+        local start_col = #name
+        local end_col = start_col + 2
+        table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
+        start_col = end_col
+        end_col = start_col + #preview
+        local kind = hint and hint.kind or nil
+        table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_col, end_col = end_col })
+        if is_different then
             start_col = end_col
-            end_col = start_col + #preview
-            local kind = hint and hint.kind or nil
-            table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_col, end_col = end_col })
-            if is_different then
-                start_col = end_col
-                end_col = start_col + 1
-                table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
-            end
+            end_col = start_col + 1
+            table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
         end
     end
-    return text
+    return name .. ': ' .. preview
 end
 
 ---@param id any
@@ -130,13 +127,15 @@ local function _open_value_floatwin(id, data)
     floatwin.open_inspect_win(title, daptools.format_variable(value, hint))
 end
 
+---@param context number
 ---@param data_providers loopdebug.session.DataProviders
 ---@param ref number
 ---@param parent_id string
 ---@param callback fun(items:loopdebug.comp.Variables.Item[])
-function Variables:_load_variables(data_providers, ref, parent_id, callback)
+function Variables:_load_variables(context, data_providers, ref, parent_id, callback)
     data_providers.variables_provider({ variablesReference = ref },
         function(_, vars_data)
+            if context ~= self._query_context then return end
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
@@ -157,7 +156,7 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
                             if var_item.data.greyout then
                                 cb({})
                             else
-                                self:_load_variables(data_providers, var.variablesReference, item_id, cb)
+                                self:_load_variables(context, data_providers, var.variablesReference, item_id, cb)
                             end
                         end
                     end
@@ -178,11 +177,12 @@ function Variables:_load_variables(data_providers, ref, parent_id, callback)
         end)
 end
 
+---@param context number
 ---@param parent_id string
 ---@param scopes loopdebug.proto.Scope[]
 ---@param data_providers loopdebug.session.DataProviders
 ---@param scopes_cb loop.comp.ItemTree.ChildrenCallback
-function Variables:_load_scopes(parent_id, scopes, data_providers, scopes_cb)
+function Variables:_load_scopes(context, parent_id, scopes, data_providers, scopes_cb)
     ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}
     for scope_idx, scope in ipairs(scopes) do
@@ -211,7 +211,7 @@ function Variables:_load_scopes(parent_id, scopes, data_providers, scopes_cb)
             if scope_item.data.greyout then
                 cb({})
             else
-                self:_load_variables(data_providers, scope.variablesReference, item_id, cb)
+                self:_load_variables(context, data_providers, scope.variablesReference, item_id, cb)
             end
         end
         table.insert(scope_items, scope_item)
@@ -224,6 +224,9 @@ function Variables:init()
         formatter = _variable_node_formatter,
         render_delay_ms = 300,
     })
+
+    ---@type number
+    self._query_context = 0
 
     ---@type loopdebug.comp.Vars.DataSource|nil
     self._current_data_source = nil
@@ -239,7 +242,7 @@ function Variables:init()
         end
     })
 
-    self:_load_watch_expressions()
+    self:_load_watch_expressions(0)
 end
 
 ---@param comp loop.CompBufferController
@@ -265,7 +268,7 @@ function Variables:link_to_buffer(comp)
                 if not item then
                     local added = watchexpr.add(expr)
                     if added then
-                        self:_load_watch_expr_value(expr)
+                        self:_load_watch_expr_value(self._query_context, expr)
                     end
                 elseif item.data and item.data.name and expr ~= item.data.name then
                     watchexpr.remove(item.data.name)
@@ -319,9 +322,10 @@ function Variables:_upsert_watch_root()
     return id
 end
 
+---@param context number
 ---@param expr string
 ---@param forced_id any
-function Variables:_load_watch_expr_value(expr, forced_id)
+function Variables:_load_watch_expr_value(context, expr, forced_id)
     local parent_id = self:_upsert_watch_root()
     local exising_items = self:get_item_and_children(parent_id)
     local item_id = forced_id
@@ -355,6 +359,7 @@ function Variables:_load_watch_expr_value(expr, forced_id)
         frameId = data_source.frame.id,
         context = 'watch',
     }, function(err, data)
+        if context ~= self._query_context then return end
         if err or not data then
             var_item.data.value = "not available"
             var_item.data.is_na = true
@@ -366,7 +371,8 @@ function Variables:_load_watch_expr_value(expr, forced_id)
                     if var_item.data.greyout then
                         cb({})
                     else
-                        self:_load_variables(data_source.data_providers, data.variablesReference, var_item.id, cb)
+                        self:_load_variables(context, data_source.data_providers, data.variablesReference, var_item.id,
+                            cb)
                     end
                 end
             end
@@ -380,25 +386,29 @@ end
 ---@param data_providers loopdebug.session.DataProviders
 ---@param frame loopdebug.proto.StackFrame
 function Variables:update_data(sess_id, sess_name, data_providers, frame)
+    self._query_context = self._query_context + 1
     self._current_data_source = {
         sess_id = sess_id,
         sess_name = sess_name,
         data_providers = data_providers,
         frame = frame,
     }
+    local ctx = self._query_context
     self:_upsert_watch_root() -- ensure this exists at the top
-    self:_load_watch_expressions()
-    self:_load_session_vars()
+    self:_load_watch_expressions(ctx)
+    self:_load_session_vars(ctx)
 end
 
-function Variables:_load_watch_expressions()
+---@param context number
+function Variables:_load_watch_expressions(context)
     ---@type loop.comp.ItemTree.Item[]
     for _, expr in ipairs(watchexpr.get()) do
-        self:_load_watch_expr_value(expr)
+        self:_load_watch_expr_value(context, expr)
     end
 end
 
-function Variables:_load_session_vars()
+---@param context number
+function Variables:_load_session_vars(context)
     local data_source = self._current_data_source
     if not data_source then return end
     ---@type loop.comp.ItemTree.Item
@@ -409,8 +419,9 @@ function Variables:_load_session_vars()
     }
     root_item.children_callback = function(cb)
         data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
+            if context ~= self._query_context then return end
             if scopes_data and scopes_data.scopes then
-                self:_load_scopes(root_item.id, scopes_data.scopes, data_source.data_providers, cb)
+                self:_load_scopes(context, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
             else
                 ---@type loop.comp.ItemTree.Item
                 local scope_item = {
