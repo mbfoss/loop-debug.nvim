@@ -22,14 +22,18 @@ local Variables    = class(ItemTreeComp)
 ---@return string preview
 ---@return boolean is_different
 local function _preview_string(str, max_len)
+    max_len = max_len > 2 and max_len or 2
     -- check conditions for returning as-is
     if #str < max_len and not str:find("\n", 1, true) then
         return str, false
     end
-    -- take first 50 characters
+    if #str < max_len then
+        -- replace newlines
+        preview = preview:gsub("\n", "⏎")
+        return preview, true
+    end
     local preview = str:sub(1, max_len)
-    -- replace newlines with literal '\n'
-    preview = preview:gsub("\n", " ")
+    preview = vim.fn.trim(preview, "", 2) .. "…"
     return preview, true
 end
 
@@ -86,10 +90,7 @@ local function _variable_node_formatter(id, data, highlights)
     local name = data.name and tostring(data.name) or "unknown"
     local value = data.value and tostring(data.value) or ""
     value = daptools.format_variable(value, hint)
-    local preview, is_different = _preview_string(value, vim.o.columns)
-    if is_different then preview = vim.fn.trim(preview, "", 2) end
-    local text = name .. ": " .. preview
-    if is_different then text = text .. "…" end
+    local preview, _ = _preview_string(value, vim.o.columns)
     if data.greyout then
         table.insert(highlights, { group = "NonText" })
     else
