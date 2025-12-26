@@ -107,6 +107,18 @@ function M.place_file_sign(id, file, line, group, name)
         _signs[group] = group_data
     end
 
+    -- remove this id from all sign names for this file
+    local file_table = group_data.byfile[file]
+    if file_table then
+        for _, signs in pairs(file_table) do
+            local old = signs[id]
+            if old and bufnr >= 0 then
+                _unplace_sign(bufnr, old)
+            end
+            signs[id] = nil
+        end
+    end
+
     group_data.id_to_file[id] = file
     group_data.byfile[file] = group_data.byfile[file] or {}
 
@@ -161,7 +173,6 @@ function M.remove_file_sign(id, group)
                 _unplace_sign(bufnr, sign)
             end
             signs[id] = nil
-            return
         end
     end
 end
@@ -247,37 +258,13 @@ function M.get_file_signs_by_id(file)
     ---@type table<number, loop.signs.Sign>
     local out = {}
 
-    -- Collect stored signs first
+    -- Collect signs first (always synchronized with buffer)
     for group, group_table in pairs(_signs) do
         local file_table = group_table.byfile[file]
         if file_table then
             for _, signs in pairs(file_table) do
                 for id, sign in pairs(signs) do
                     out[id] = sign
-                end
-            end
-        end
-    end
-
-    -- If buffer isn't loaded, stored data is best we can do
-    local bufnr = _get_loaded_bufnr(file)
-    if bufnr < 0 or not next(out) then
-        return out
-    end
-
-    -- Fetch live sign positions from Neovim
-    for group in pairs(_signs) do
-        local placed = vim.fn.sign_getplaced(
-            bufnr,
-            { group = _signs_id_prefix .. group }
-        )[1]
-
-        if placed and placed.signs then
-            for _, psign in ipairs(placed.signs) do
-                local sign = out[psign.id]
-                if sign then
-                    -- Update stored state lazily
-                    sign.lnum = psign.lnum
                 end
             end
         end

@@ -205,18 +205,18 @@ local function _enable_breakpoint_sync_on_save()
             -- Clear + resync
             dapbreakpoints.clear_file_breakpoints(file)
             -- Collect breakpoint signs only
-            local breakpoints = {}
+            local bpsigns = {}
             for _, sign in pairs(signs_by_id) do
                 if sign.group == "breakpoints" then
-                    breakpoints[#breakpoints + 1] = sign
+                    bpsigns[#bpsigns + 1] = sign
                 end
             end
             -- Sort breakpoints by line number
-            table.sort(breakpoints, function(a, b)
+            table.sort(bpsigns, function(a, b)
                 return a.lnum < b.lnum
             end)
             -- Add breakpoints in order
-            for _, sign in ipairs(breakpoints) do
+            for _, sign in ipairs(bpsigns) do
                 dapbreakpoints.add_breakpoint(file, sign.lnum)
             end
         end,
