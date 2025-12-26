@@ -1,17 +1,16 @@
-local config          = require("loop-debug.config")
-local signs           = require('loop-debug.signs')
-local filetools       = require('loop.tools.file')
-local ItemListComp    = require('loop.comp.ItemList')
-local OutputLinesComp = require('loop.comp.OutputLines')
-local uitools         = require('loop.tools.uitools')
-local notifications   = require('loop.notifications')
-local selector        = require('loop.tools.selector')
-local breakpoints_ui  = require('loop-debug.bpts_ui')
-local floatwin        = require('loop-debug.tools.floatwin')
-local daptools        = require('loop-debug.dap.daptools')
-local Trackers        = require("loop.tools.Trackers")
+local config         = require("loop-debug.config")
+local signs          = require('loop-debug.signs')
+local filetools      = require('loop.tools.file')
+local ItemListComp   = require('loop.comp.ItemList')
+local uitools        = require('loop.tools.uitools')
+local notifications  = require('loop.notifications')
+local selector       = require('loop.tools.selector')
+local breakpoints_ui = require('loop-debug.bpts_ui')
+local floatwin       = require('loop-debug.tools.floatwin')
+local daptools       = require('loop-debug.dap.daptools')
+local Trackers       = require("loop.tools.Trackers")
 
-local M               = {}
+local M              = {}
 
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
@@ -23,7 +22,7 @@ local M               = {}
 ---@field cur_thread_id number|nil
 ---@field cur_frame loopdebug.proto.StackFrame|nil
 ---@field repl_ctrl loop.ReplController|nil
----@field debuggee_output_comp loop.comp.OutputLines|nil
+---@field debuggee_output_ctrl loop.OutputBufferController|nil
 
 ---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
@@ -51,12 +50,12 @@ local M               = {}
 ---@field on_job_update fun(update:loopdebug.mgr.JobUpdateEvent)
 
 ---@type loop.tools.Trackers<loopdebug.mgr.DebugTracker>
-local _trackers       = Trackers:new()
+local _trackers      = Trackers:new()
 
 ---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
 
-local _page_groups    = {
+local _page_groups   = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -65,7 +64,7 @@ local _page_groups    = {
     repl = "repl",
 }
 
-local _ansi_colors    = {
+local _ansi_colors   = {
     RESET = "\27[0m",
     BOLD  = "\27[1m",
     GREEN = "\27[32m",
@@ -296,7 +295,7 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
     if repl_page_group then
         local page_data, err = repl_page_group.add_page({
             id = tostring(sess_id),
-            type = "repl_buf",
+            type = "repl",
             label = sess_name,
             buftype = "repl",
             activate = false
@@ -313,6 +312,23 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
                         session_data.repl_ctrl.add_output(_ansi_colors.RED .. msg .. _ansi_colors.RESET)
                     else
                         session_data.repl_ctrl.add_output(tostring(data.result))
+                    end
+                end)
+            end)
+            session_data.repl_ctrl.set_completion_handler(function(input, callback)
+                data_providers.completion_provider({
+                    text = input,
+                    column = #input + 1,
+                }, function(_, data)
+                    if data then
+                        local strs = {}
+                        for _, item in ipairs(data.targets or {}) do
+                            local str = item.text and item.text or item.label
+                            if str then table.insert(strs, str) end
+                        end
+                        callback(strs)
+                    else
+                        callback({})
                     end
                 end)
             end)
@@ -571,9 +587,9 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
         return
     end
 
-    local output_comp
-    output_comp = sess_data.debuggee_output_comp
-    if not output_comp then
+    local debuggee_output_ctrl
+    debuggee_output_ctrl = sess_data.debuggee_output_ctrl
+    if not debuggee_output_ctrl then
         local page_group = jobdata.page_manager.get_page_group(_page_groups.output)
         if not page_group then
             page_group = jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
@@ -585,19 +601,18 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
         if not page_data and page_group then
             page_data = page_group.add_page({
                 id = tostring(sess_id),
-                type = "comp_buf",
+                type = "output",
                 buftype = "output",
                 label = sess_name,
             })
         end
         if page_data then
-            output_comp = OutputLinesComp:new()
-            output_comp:link_to_buffer(page_data.comp_buf)
-            sess_data.debuggee_output_comp = output_comp
+            assert(page_data.output_buf)
+            sess_data.debuggee_output_ctrl = page_data.output_buf
         end
     end
-    if output_comp then
-        ---@type loop.comp.output.Highlight[]|nil
+    if debuggee_output_ctrl then
+        ---@type loop.Highlight[]|nil
         local highlights = nil
         if category == "stderr" then
             highlights = {
@@ -606,7 +621,7 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
         end
         for line in output:gmatch("([^\r\n]*)\r?\n?") do
             if line ~= "" then
-                output_comp:add_line(line, highlights)
+                debuggee_output_ctrl.add_lines(line, highlights)
             end
         end
     end
@@ -715,7 +730,7 @@ function M.track_new_debugjob(task_name, page_manager)
 
     local page_data = page_manager.add_page_group(_page_groups.task, "Debug Sessions").add_page({
         id = "sessions",
-        type = "comp_buf",
+        type = "comp",
         buftype = "sessions",
         label = "Debug Sessions",
         activate = true,

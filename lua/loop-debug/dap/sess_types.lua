@@ -74,6 +74,7 @@ error('Cannot require a meta file')
 ---@alias loopdebug.session.ScopesProvider fun(args:loopdebug.proto.ScopesArguments, callback:fun(err:string|nil, data: loopdebug.proto.ScopesResponse | nil))
 ---@alias loopdebug.session.VariablesProvider fun(args:loopdebug.proto.VariablesArguments, callback:fun(err:string|nil, data: loopdebug.proto.VariablesResponse | nil))
 ---@alias loopdebug.session.EvaluateProvider fun(args:loopdebug.proto.EvaluateArguments, callback:fun(err:string|nil, data: loopdebug.proto.EvaluateResponse | nil))
+---@alias loopdebug.session.CompletionProvider fun(args:loopdebug.proto.CompletionsArguments, callback:fun(err:string|nil, data: loopdebug.proto.CompletionsResponse | nil))
 
 ---@class loopdebug.session.DataProviders
 ---@field threads_provider loopdebug.session.ThreadsProvider
@@ -81,6 +82,7 @@ error('Cannot require a meta file')
 ---@field scopes_provider loopdebug.session.ScopesProvider
 ---@field variables_provider loopdebug.session.VariablesProvider
 ---@field evaluate_provider loopdebug.session.EvaluateProvider
+---@field completion_provider loopdebug.session.CompletionProvider
 
 ---@class loopdebug.session.notify.ThreadsEventScope
 ---@field thread_id number

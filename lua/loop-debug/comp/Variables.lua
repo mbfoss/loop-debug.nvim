@@ -68,7 +68,7 @@ end
 
 ---@param id any
 ---@param data any
----@param highlights loop.comp.ItemTree.Highlight
+---@param highlights loop.Highlight
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
     if data.is_na and not data.name then

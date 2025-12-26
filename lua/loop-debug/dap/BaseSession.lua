@@ -377,6 +377,12 @@ function BaseSession:request_evaluate(args, callback)
     self:_request("evaluate", args, self:_wrap(callback))
 end
 
+---@param args loopdebug.proto.CompletionsArguments
+---@param callback fun(err: string|nil, body: loopdebug.proto.CompletionsResponse|nil)|nil
+function BaseSession:request_completions(args, callback)
+    self:_request("completions", args, self:_wrap(callback))
+end
+
 ---@param args loopdebug.proto.SetVariableArguments
 ---@param callback fun(err: string|nil, body: loopdebug.proto.SetVariableResponse|nil)|nil
 function BaseSession:request_setVariable(args, callback)
