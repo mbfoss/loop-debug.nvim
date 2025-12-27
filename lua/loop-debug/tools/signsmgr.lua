@@ -1,44 +1,33 @@
----@class loop.signs
-local M                = {}
-
-local config           = require("loop-debug.config")
-local Trackers         = require('loop.tools.Trackers')
-
----@alias loop.signs.SignGroup '"breakpoints"'|'"currentframe"'
----@alias loop.signs.SignName
----| '"currentframe"'
----| '"active_breakpoint"'
----| '"inactive_breakpoint"'
----| '"logpoint"'
----| '"logpoint_inactive"'
----| '"conditional_breakpoint"'
----| '"conditional_breakpoint_inactive"'
----| '"rejected_breakpoint"'
+local M              = {}
 
 ---@class loop.signs.Sign
 ---@field id number
----@field group loop.signs.SignGroup
----@field name loop.signs.SignName
+---@field group string
+---@field name string
 ---@field lnum number
 ---@field priority number
 
 ---@alias loop.signs.ById table<number, loop.signs.Sign>        -- id → sign
----@alias loop.signs.BySignName table<loop.signs.SignName, loop.signs.ById>
+---@alias loop.signs.BySignName table<string, loop.signs.ById>
 ---@alias loop.signs.ByFile table<string, loop.signs.BySignName>
 
 ---@class loop.signs.GroupData
 ---@field byfile loop.signs.ByFile
 ---@field id_to_file table<number, string>
 
----@type table<loop.signs.SignGroup, loop.signs.GroupData>
-local _signs           = {}
+---@class loop.signs.GroupInfo
+---@field sign_names table<string,boolean>
+---@field priority number
 
-local _init_done       = false
-local _signs_id_prefix = "loopplugin_"
+---@type table<string,loop.signs.GroupInfo>
+local _defined_signs = {} -- group -> info
 
--- -------------------------------------------------------------------
--- Helpers
--- -------------------------------------------------------------------
+---@type table<string, loop.signs.GroupData> -- group -> data
+local _signs         = {}
+local _id_prefix     = "loopplugin_"
+
+local _init_done     = false
+
 
 ---@param file string
 ---@return integer
@@ -48,21 +37,21 @@ local function _get_loaded_bufnr(file)
 end
 
 local function _remove_buf_signs(bufnr, group)
-    vim.fn.sign_unplace(_signs_id_prefix .. group, { buffer = bufnr })
+    vim.fn.sign_unplace(_id_prefix .. group, { buffer = bufnr })
 end
 
 local function _place_sign(bufnr, sign)
     vim.fn.sign_place(
         sign.id,
-        _signs_id_prefix .. sign.group,
-        _signs_id_prefix .. sign.name,
+        _id_prefix .. sign.group,
+        _id_prefix .. sign.name,
         bufnr,
         { lnum = sign.lnum, priority = sign.priority }
     )
 end
 
 local function _unplace_sign(bufnr, sign)
-    vim.fn.sign_unplace(_signs_id_prefix .. sign.group, {
+    vim.fn.sign_unplace(_id_prefix .. sign.group, {
         buffer = bufnr,
         id = sign.id,
     })
@@ -90,13 +79,41 @@ end
 -- Public API
 -- -------------------------------------------------------------------
 
+---@param group string
+---@param priority number
+function M.define_sign_group(group, priority)
+    assert(not _defined_signs[group])
+    _defined_signs[group] = {
+        sign_names = {},
+        priority = priority,
+    }
+end
+
+---@param group string
+---@param name string
+---@param text string
+---@param texthl string
+function M.define_sign(group, name, text, texthl)
+    local defined_group = _defined_signs[group]
+    assert(defined_group, "sign group not defined")
+    assert(not defined_group.sign_names[name], "sign already in group")
+
+    defined_group.sign_names[name] = true
+    vim.fn.sign_define(_id_prefix .. name, {
+        text = text,
+        texthl = texthl,
+    })
+end
+
 ---@param id number
 ---@param file string
 ---@param line number
----@param group loop.signs.SignGroup
----@param name loop.signs.SignName
+---@param group string
+---@param name string
 function M.place_file_sign(id, file, line, group, name)
     assert(_init_done)
+    local defined_group = _defined_signs[group]
+    assert(defined_group and defined_group.sign_names[name], "sign group/name not defined")
 
     file = vim.fn.fnamemodify(file, ":p")
     local bufnr = _get_loaded_bufnr(file)
@@ -138,7 +155,7 @@ function M.place_file_sign(id, file, line, group, name)
         group = group,
         name = name,
         lnum = line,
-        priority = config.current.sign_priority[group] or 12,
+        priority = defined_group.priority or 12,
     }
 
     name_table[id] = sign
@@ -149,9 +166,10 @@ function M.place_file_sign(id, file, line, group, name)
 end
 
 ---@param id number
----@param group loop.signs.SignGroup
+---@param group string
 function M.remove_file_sign(id, group)
     assert(_init_done)
+    assert(_defined_signs[group], "sign group not defined")
 
     local group_table = _signs[group]
     if not group_table then return end
@@ -178,9 +196,10 @@ function M.remove_file_sign(id, group)
 end
 
 ---@param file string
----@param group loop.signs.SignGroup
+---@param group string
 function M.remove_file_signs(file, group)
     assert(_init_done)
+    assert(_defined_signs[group], "sign group not defined")
 
     file = vim.fn.fnamemodify(file, ":p")
     local group_table = _signs[group]
@@ -207,9 +226,10 @@ function M.remove_file_signs(file, group)
     end
 end
 
----@param group loop.signs.SignGroup
+---@param group string
 function M.remove_signs(group)
     assert(_init_done)
+    assert(_defined_signs[group], "sign group not defined")
 
     local group_table = _signs[group]
     if not group_table then return end
@@ -225,6 +245,7 @@ function M.remove_signs(group)
 end
 
 function M.clear_all()
+    assert(_init_done)
     for group, group_table in pairs(_signs) do
         for file in pairs(group_table.byfile) do
             local bufnr = _get_loaded_bufnr(file)
@@ -236,9 +257,10 @@ function M.clear_all()
     _signs = {}
 end
 
----@param group loop.signs.SignGroup
+---@param group string
 function M.refresh_all_signs(group)
     assert(_init_done)
+    assert(_defined_signs[group], "sign group not defined")
 
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
         if vim.api.nvim_buf_is_loaded(bufnr) then
@@ -257,8 +279,7 @@ function M.get_file_signs_by_id(file)
 
     ---@type table<number, loop.signs.Sign>
     local out = {}
-
-    -- Collect signs first (always synchronized with buffer)
+    -- Collect stored signs first
     for group, group_table in pairs(_signs) do
         local file_table = group_table.byfile[file]
         if file_table then
@@ -269,45 +290,42 @@ function M.get_file_signs_by_id(file)
             end
         end
     end
+    -- If buffer isn't loaded, stored data is best we can do
+    local bufnr = _get_loaded_bufnr(file)
+    if bufnr < 0 or not next(out) then
+        return out
+    end
+    -- Fetch live sign positions from Neovim
+    for group in pairs(_signs) do
+        local placed = vim.fn.sign_getplaced(
+            bufnr,
+            { group = _id_prefix .. group }
+        )[1]
 
+        if placed and placed.signs then
+            for _, psign in ipairs(placed.signs) do
+                local sign = out[psign.id]
+                if sign then
+                    -- Update stored state lazily
+                    sign.lnum = psign.lnum
+                end
+            end
+        end
+    end
     return out
-end
-
--- -------------------------------------------------------------------
--- Setup
--- -------------------------------------------------------------------
-
-local function _define_sign(name, text, texthl)
-    vim.fn.sign_define(_signs_id_prefix .. name, {
-        text = text,
-        texthl = texthl,
-    })
 end
 
 function M.init()
     if _init_done then return end
     _init_done = true
-
-    _define_sign("currentframe", "▶", "Todo")
-    _define_sign("active_breakpoint", "●", "Debug")
-    _define_sign("inactive_breakpoint", "○", "Debug")
-    _define_sign("logpoint", "◆", "Debug")
-    _define_sign("logpoint_inactive", "◇", "Debug")
-    _define_sign("conditional_breakpoint", "■", "Debug")
-    _define_sign("conditional_breakpoint_inactive", "□", "Debug")
-
-    vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+    local au_group = vim.api.nvim_create_augroup("loopplugin_signs", { clear = true })
+    vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter" }, {
+        group = au_group,
         callback = function(ev)
-            _remove_buf_signs(ev.buf, "breakpoints")
-            _remove_buf_signs(ev.buf, "currentframe")
-        end,
-    })
-
-    vim.api.nvim_create_autocmd("BufReadPost", {
-        callback = function(ev)
-            _apply_buffer_signs(ev.buf, "breakpoints")
-            _apply_buffer_signs(ev.buf, "currentframe")
-        end,
+            for group_name, _ in pairs(_defined_signs) do
+                _apply_buffer_signs(ev.buf, group_name)
+            end
+        end
     })
 end
 

@@ -1,13 +1,27 @@
-local signs             = require('loop-debug.signs')
-local dapbreakpoints    = require('loop-debug.dap.breakpoints')
-local selector          = require("loop.tools.selector")
-local wsinfo          = require("loop.wsinfo")
-local uitools           = require("loop.tools.uitools")
+local current_config = require('loop-debug.config').current
+local signsmgr       = require('loop-debug.tools.signsmgr')
+local breakpoints    = require('loop-debug.breakpoints')
+local selector       = require("loop.tools.selector")
+local wsinfo         = require("loop.wsinfo")
+local uitools        = require("loop.tools.uitools")
 
-local M                 = {}
+local M              = {}
 
-local _init_done        = false
-local _init_err_msg     = "init() not called"
+local _init_done     = false
+local _init_err_msg  = "init() not called"
+
+local _sign_group    = "breakpoints"
+
+local _sign_names    = {
+    active_breakpoint               = "active_breakpoint",
+    inactive_breakpoint             = "inactive_breakpoint",
+    logpoint                        = "logpoint",
+    logpoint_inactive               = "logpoint_inactive",
+    conditional_breakpoint          = "conditional_breakpoint",
+    conditional_breakpoint_inactive = "conditional_breakpoint_inactive",
+    rejected_breakpoint             = "rejected_breakpoint",
+}
+
 
 ---@class loop.debug_ui.Breakpointata
 ---@field breakpoint loopdebug.SourceBreakpoint
@@ -18,16 +32,16 @@ local _breakpoints_data = {}
 
 ---@param bp loopdebug.SourceBreakpoint
 ---@param verified boolean
----@return loop.signs.SignName
+---@return string
 local function _get_breakpoint_sign(bp, verified)
     -- Determine the sign type based on breakpoint fields
     local sign
     if bp.logMessage then
-        sign = verified and "logpoint" or "logpoint_inactive"
+        sign = verified and _sign_names.logpoint or _sign_names.logpoint_inactive
     elseif bp.condition or bp.hitCondition then
-        sign = verified and "conditional_breakpoint" or "conditional_breakpoint_inactive"
+        sign = verified and _sign_names.conditional_breakpoint or _sign_names.conditional_breakpoint_inactive
     else
-        sign = verified and "active_breakpoint" or "inactive_breakpoint"
+        sign = verified and _sign_names.active_breakpoint or _sign_names.inactive_breakpoint
     end
     return sign
 end
@@ -50,7 +64,7 @@ end
 local function _refresh_breakpoint_sign(id, data)
     local verified = _get_breakpoint_state(data)
     local sign = _get_breakpoint_sign(data.breakpoint, verified)
-    signs.place_file_sign(id, data.breakpoint.file, data.breakpoint.line, "breakpoints", sign)
+    signsmgr.place_file_sign(id, data.breakpoint.file, data.breakpoint.line, _sign_group, sign)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
@@ -59,13 +73,13 @@ local function _on_breakpoint_added(bp)
         breakpoint = bp,
     }
     local sign = _get_breakpoint_sign(bp, true)
-    signs.place_file_sign(bp.id, bp.file, bp.line, "breakpoints", sign)
+    signsmgr.place_file_sign(bp.id, bp.file, bp.line, _sign_group, sign)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
 local function _on_breakpoint_removed(bp)
     _breakpoints_data[bp.id] = nil
-    signs.remove_file_sign(bp.id, "breakpoints")
+    signsmgr.remove_file_sign(bp.id, _sign_group)
 end
 
 ---@param removed loopdebug.SourceBreakpoint[]
@@ -76,13 +90,13 @@ local function _on_all_breakpoints_removed(removed)
         files[bp.file] = true
     end
     for file, _ in pairs(files) do
-        signs.remove_file_signs(file, "breakpoints")
+        signsmgr.remove_file_signs(file, _sign_group)
     end
 end
 
 ---@param task_name string -- task name
 ---@return loop.job.debugjob.Tracker
-function M.track_new_debugjob(task_name)
+function _start(task_name)
     assert(_init_done, _init_err_msg)
     assert(type(task_name) == "string")
 
@@ -200,14 +214,14 @@ local function _enable_breakpoint_sync_on_save()
             end
             file = vim.fn.fnamemodify(file, ":p")
             -- Fetch up-to-date sign data
-            local signs_by_id = signs.get_file_signs_by_id(file)
+            local signs_by_id = signsmgr.get_file_signs_by_id(file)
 
             -- Clear + resync
-            dapbreakpoints.clear_file_breakpoints(file)
+            breakpoints.clear_file_breakpoints(file)
             -- Collect breakpoint signs only
             local bpsigns = {}
             for _, sign in pairs(signs_by_id) do
-                if sign.group == "breakpoints" then
+                if sign.group == _sign_group then
                     bpsigns[#bpsigns + 1] = sign
                 end
             end
@@ -217,69 +231,27 @@ local function _enable_breakpoint_sync_on_save()
             end)
             -- Add breakpoints in order
             for _, sign in ipairs(bpsigns) do
-                dapbreakpoints.add_breakpoint(file, sign.lnum)
+                breakpoints.add_breakpoint(file, sign.lnum)
             end
         end,
     })
-end
-
-
----@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
-function M.breakpoints_command(command)
-    assert(_init_done, _init_err_msg)
-    local ws_dir = wsinfo.get_ws_dir()
-    if not ws_dir then
-        vim.notify('No active workspace')
-        return
-    end
-    command = command and command:match("^%s*(.-)%s*$") or ""
-    if command == "" or command == "toggle" then
-        local file, line = uitools.get_current_file_and_line()
-        if file and line then
-            dapbreakpoints.toggle_breakpoint(file, line)
-        end
-    elseif command == "logpoint" then
-        vim.ui.input({ prompt = "Enter log message: " }, function(message)
-            if message and message ~= "" then
-                local file, line = uitools.get_current_file_and_line()
-                if file and line then
-                    dapbreakpoints.set_logpoint(file, line, message)
-                    print("Logpoint set at " .. file .. ":" .. line)
-                end
-            end
-        end)
-    elseif command == "clear_file" then
-        local bufnr = vim.api.nvim_get_current_buf()
-        if vim.api.nvim_buf_is_valid(bufnr) then
-            local full_path = vim.api.nvim_buf_get_name(bufnr)
-            if full_path and full_path ~= "" then
-                uitools.confirm_action("Clear dapbreakpoints in file", false, function(accepted)
-                    if accepted == true then
-                        dapbreakpoints.clear_file_breakpoints(full_path)
-                    end
-                end)
-            end
-        end
-    elseif command == "clear_all" then
-        uitools.confirm_action("Clear all dapbreakpoints", false, function(accepted)
-            if accepted == true then
-                dapbreakpoints.clear_all_breakpoints()
-            end
-        end)
-    elseif command == "list" then
-        _select_breakpoint()
-    else
-        vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
-    end
 end
 
 function M.init()
     assert(not _init_done, "init already done")
     _init_done = true
 
+    signsmgr.define_sign_group(_sign_group, current_config and current_config.sign_priority["breakpoints"] or 12)
+    signsmgr.define_sign(_sign_group, _sign_names.active_breakpoint, "●", "Debug")
+    signsmgr.define_sign(_sign_group, _sign_names.inactive_breakpoint, "○", "Debug")
+    signsmgr.define_sign(_sign_group, _sign_names.logpoint, "◆", "Debug")
+    signsmgr.define_sign(_sign_group, _sign_names.logpoint_inactive, "◇", "Debug")
+    signsmgr.define_sign(_sign_group, _sign_names.conditional_breakpoint, "■", "Debug")
+    signsmgr.define_sign(_sign_group, _sign_names.conditional_breakpoint_inactive, "□", "Debug")
+
     _enable_breakpoint_sync_on_save()
 
-    require('loop-debug.dap.breakpoints').add_tracker({
+    breakpoints.add_tracker({
         on_added = _on_breakpoint_added,
         on_removed = _on_breakpoint_removed,
         on_all_removed = _on_all_breakpoints_removed

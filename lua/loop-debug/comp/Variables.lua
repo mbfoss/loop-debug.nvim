@@ -381,11 +381,12 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
     end)
 end
 
----@param sess_id number
----@param sess_name string
----@param data_providers loopdebug.session.DataProviders
----@param frame loopdebug.proto.StackFrame
+---@param sess_id number?
+---@param sess_name string?
+---@param data_providers loopdebug.session.DataProviders?
+---@param frame loopdebug.proto.StackFrame?
 function Variables:update_data(sess_id, sess_name, data_providers, frame)
+    sdfasdfasfd
     self._query_context = self._query_context + 1
     self._current_data_source = {
         sess_id = sess_id,
@@ -436,7 +437,7 @@ function Variables:_load_session_vars(context)
 end
 
 ---@param sess_id any
-function Variables:greyout_content(sess_id)
+function Variables:_greyout_content(sess_id)
     do
         local items = self:get_item_and_children(_get_root_id(true))
         for _, item in ipairs(items) do

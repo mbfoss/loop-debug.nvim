@@ -1,5 +1,5 @@
 local run = require('loop-debug.run')
-local breakpoints = require('loop-debug.dap.breakpoints')
+local dapbreakpoints = require('loop-debug.dap.breakpoints')
 local watchexpr = require('loop-debug.watchexpr')
 local debugui = require('loop-debug.ui')
 
@@ -8,14 +8,14 @@ local task_provider =
 {
     get_state = function()
         local state = {}
-        state.breakpoints = breakpoints.get_breakpoints()
+        state.breakpoints = dapbreakpoints.get_breakpoints()
         state.watchexpr = watchexpr.get()
         state.uilayout = debugui.get_layout_config()
         return state
     end,
     on_workspace_loaded = function(ws_dir, state)
         if state.breakpoints then
-            breakpoints.set_breakpoints(state.breakpoints)
+            dapbreakpoints.set_breakpoints(state.breakpoints)
             watchexpr.set(state.watchexpr or {})
             debugui.set_layout_config(state.uilayout)
         end

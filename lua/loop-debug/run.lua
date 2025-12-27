@@ -3,7 +3,7 @@ local M = {}
 local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
 local manager = require('loop-debug.manager')
-local bpts_ui = require('loop-debug.bpts_ui')
+local breakpoints = require('loop-debug.breakpoints')
 local wsinfo = require('loop.wsinfo')
 local fntools = require('loop.tools.fntools')
 
@@ -25,7 +25,6 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
 
     -- Add trackers
     job:add_tracker(manager.track_new_debugjob(args.name, page_manager))
-    job:add_tracker(bpts_ui.track_new_debugjob(args.name))
     job:add_tracker({ on_exit = exit_handler })
 
     -- Start the debug job
@@ -123,7 +122,8 @@ function M.start_debug_task(task, page_manager, on_exit)
             adapter = adapter_config,
             request = task.request,
             request_args = request_args,
-            terminate_debuggee = task.terminateOnDisconnect
+            terminate_debuggee = task.terminateOnDisconnect,
+            initial_breakpoints = breakpoints.get_breakpoints()
         },
     }
 

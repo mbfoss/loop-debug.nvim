@@ -109,9 +109,13 @@ function StackTrace:add_frame_tracker(callback)
 end
 
 ---@param data loopdebug.session.DataProviders
----@param thread_id number
----@param thread_name string|nil
+---@param thread_id number?
+---@param thread_name string?
 function StackTrace:update_data(data, thread_id, thread_name)
+    if not thread_id then
+        self:_greyout_content()
+        return
+    end
     self._query_context = self._query_context + 1
     local context = self._query_context
     data.stack_provider({
@@ -140,7 +144,7 @@ function StackTrace:clear_content()
     self:set_items({})
 end
 
-function StackTrace:greyout_content()
+function StackTrace:_greyout_content()
     local items = self:get_items()
     for _, item in ipairs(items) do
         item.data.greyout = true

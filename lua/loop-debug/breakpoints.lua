@@ -1,6 +1,9 @@
-local Trackers = require("loop.tools.Trackers")
+local M = {}
 
-local M        = {}
+
+local Trackers = require("loop.tools.Trackers")
+local uitools  = require("loop.tools.uitools")
+local wsinfo   = require('loop.wsinfo')
 
 ---@class loopdebug.SourceBreakpoint
 ---@field id number
@@ -31,6 +34,31 @@ local _trackers = Trackers:new()
 --- Tracks whether breakpoints need to be saved to disk.
 ---@type boolean
 local _need_saving = false
+
+---@param callbacks loopdebug.breakpoints.Tracker
+---@return number
+function M.add_tracker(callbacks)
+    local tracker_id = _trackers:add_tracker(callbacks)
+    --initial snapshot
+    ---@type loopdebug.SourceBreakpoint[]
+    local current = vim.tbl_values(_by_id)
+    table.sort(current, function(a, b)
+        if a.file ~= b.file then return a.file < b.file end
+        return a.line < b.line
+    end)
+    if callbacks.on_added then
+        for _, bp in ipairs(current) do
+            callbacks.on_added(bp)
+        end
+    end
+    return tracker_id
+end
+
+---@param id number
+---@return boolean
+function M.remove_tracker(id)
+    return _trackers:remove_tracker(id)
+end
 
 local function _norm(file)
     if not file or file == "" then return file end
@@ -225,29 +253,52 @@ function M.for_each(handler)
     end
 end
 
----@param callbacks loopdebug.breakpoints.Tracker
----@return number
-function M.add_tracker(callbacks)
-    local tracker_id = _trackers:add_tracker(callbacks)
-    --initial snapshot
-    ---@type loopdebug.SourceBreakpoint[]
-    local current = vim.tbl_values(_by_id)
-    table.sort(current, function(a, b)
-        if a.file ~= b.file then return a.file < b.file end
-        return a.line < b.line
-    end)
-    if callbacks.on_added then
-        for _, bp in ipairs(current) do
-            callbacks.on_added(bp)
-        end
+---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
+function M.breakpoints_command(command)
+    local ws_dir = wsinfo.get_ws_dir()
+    if not ws_dir then
+        vim.notify('No active workspace')
+        return
     end
-    return tracker_id
-end
-
----@param id number
----@return boolean
-function M.remove_tracker(id)
-    return _trackers:remove_tracker(id)
+    command = command and command:match("^%s*(.-)%s*$") or ""
+    if command == "" or command == "toggle" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            M.toggle_breakpoint(file, line)
+        end
+    elseif command == "logpoint" then
+        vim.ui.input({ prompt = "Enter log message: " }, function(message)
+            if message and message ~= "" then
+                local file, line = uitools.get_current_file_and_line()
+                if file and line then
+                    M.set_logpoint(file, line, message)
+                    print("Logpoint set at " .. file .. ":" .. line)
+                end
+            end
+        end)
+    elseif command == "clear_file" then
+        local bufnr = vim.api.nvim_get_current_buf()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+            local full_path = vim.api.nvim_buf_get_name(bufnr)
+            if full_path and full_path ~= "" then
+                uitools.confirm_action("Clear dapbreakpoints in file", false, function(accepted)
+                    if accepted == true then
+                        M.clear_file_breakpoints(full_path)
+                    end
+                end)
+            end
+        end
+    elseif command == "clear_all" then
+        uitools.confirm_action("Clear all dapbreakpoints", false, function(accepted)
+            if accepted == true then
+                M.clear_all_breakpoints()
+            end
+        end)
+    elseif command == "list" then
+        _select_breakpoint()
+    else
+        vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
+    end
 end
 
 return M

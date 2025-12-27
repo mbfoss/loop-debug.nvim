@@ -67,7 +67,7 @@ function M.init()
     end
 
     require('loop-debug.signs').init()
-    require('loop-debug.bpts_ui').init()
+    require('loop-debug.breakpoints').init()
 end
 
 -----------------------------------------------------------

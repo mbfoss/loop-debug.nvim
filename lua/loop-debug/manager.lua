@@ -1,16 +1,15 @@
-local config         = require("loop-debug.config")
-local signs          = require('loop-debug.signs')
-local filetools      = require('loop.tools.file')
-local ItemListComp   = require('loop.comp.ItemList')
-local uitools        = require('loop.tools.uitools')
-local notifications  = require('loop.notifications')
-local selector       = require('loop.tools.selector')
-local breakpoints_ui = require('loop-debug.bpts_ui')
-local floatwin       = require('loop-debug.tools.floatwin')
-local daptools       = require('loop-debug.dap.daptools')
-local Trackers       = require("loop.tools.Trackers")
+local config        = require("loop-debug.config")
+local signs         = require('loop-debug.signs')
+local filetools     = require('loop.tools.file')
+local ItemListComp  = require('loop.comp.ItemList')
+local uitools       = require('loop.tools.uitools')
+local notifications = require('loop.notifications')
+local selector      = require('loop.tools.selector')
+local breakpoints   = require('lua.loop-debug.breakpoints')
+local floatwin      = require('loop-debug.tools.floatwin')
+local daptools      = require('loop-debug.dap.daptools')
 
-local M              = {}
+local M             = {}
 
 ---@class loopdebug.mgr.Context
 ---@field session_ctx number
@@ -50,25 +49,10 @@ local M              = {}
 ---@field sessionlist_page loop.PageController
 ---@field command_fn loopdebug.mgr.JobCommandFn
 
----@class loopdebug.mgr.JobUpdateEvent
----@field session_id number|nil
----@field sess_name string|nil
----@field state string|nil
----@field cur_thread_id number|nil
----@field cur_thread_name string|nil
----@field cur_frame loopdebug.proto.StackFrame|nil
----@field data_providers loopdebug.session.DataProviders
-
----@class loopdebug.mgr.DebugTracker
----@field on_job_update fun(update:loopdebug.mgr.JobUpdateEvent)
-
----@type loop.tools.Trackers<loopdebug.mgr.DebugTracker>
-local _trackers      = Trackers:new()
-
 ---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
 
-local _page_groups   = {
+local _page_groups  = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -77,7 +61,7 @@ local _page_groups   = {
     repl = "repl",
 }
 
-local _ansi_colors   = {
+local _ansi_colors  = {
     RESET = "\27[0m",
     BOLD  = "\27[1m",
     GREEN = "\27[32m",
@@ -111,20 +95,6 @@ local function _send_job_udpate_event(single_target)
             _trackers:invoke("on_job_update", event)
         end
     end
-end
-
----@param callbacks loopdebug.mgr.DebugTracker
----@return number
-function M.add_tracker(callbacks)
-    local tracker_id = _trackers:add_tracker(callbacks)
-    _send_job_udpate_event(callbacks)
-    return tracker_id
-end
-
----@param id number
----@return boolean
-function M.remove_tracker(id)
-    return _trackers:remove_tracker(id)
 end
 
 ---@param job_data loopdebug.mgr.DebugJobData
@@ -926,7 +896,7 @@ end
 ---@param arg1 string|nil
 function M.debug_command(command, arg1)
     if command == "breakpoint" then
-        breakpoints_ui.breakpoints_command(arg1)
+        breakpoints.breakpoints_command(arg1)
         return
     end
     local job = _current_job_data

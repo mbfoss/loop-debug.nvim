@@ -6,7 +6,6 @@ local BaseSession = require("loop-debug.dap.BaseSession")
 local FSM = require("loop-debug.tools.FSM")
 
 local fsmdata = require('loop-debug.dap.fsmdata')
-local breakpoints = require('loop-debug.dap.breakpoints')
 
 ---@class loopdebug.Session
 ---@field new fun(self: loopdebug.Session, name:string) : loopdebug.Session
@@ -20,7 +19,6 @@ local breakpoints = require('loop-debug.dap.breakpoints')
 ---@field _can_send_breakpoints boolean
 ---@field _source_breakpoints loopdebug.session.SourceBreakpointsData
 ---@field _subsession_id number
----@field _breakpoints_tracker_id number
 ---@field _data_providers loopdebug.session.DataProviders
 local Session = class()
 
@@ -36,7 +34,6 @@ function Session:init(name)
 
     self._can_send_breakpoints = false
     self._source_breakpoints = { by_location = {}, by_usr_id = {}, by_dap_id = {}, pending_files = {} }
-    self._breakpoints_tracker_id = 0
 
     self._data_providers = self:_create_data_providers()
 end
@@ -48,6 +45,20 @@ function Session:_create_data_providers()
     end
 
     local na_msg = "not available"
+
+    ---@type loopdebug.session.BreakpointsCommand
+    local breakpoint_command = function(cmd, bp)
+        if cmd == "add" then
+            self:_set_source_breakpoint(bp)
+        elseif cmd == "remove" then
+            self:_remove_breakpoint(bp.id)
+        elseif cmd == "remove_all" then
+            self:_remove_all_breakpoints()
+        else
+            assert(false)
+        end
+    end
+
     ---@type loopdebug.session.ThreadsProvider
     local threads_provider = function(callback)
         if not is_available() then
@@ -137,6 +148,7 @@ function Session:_create_data_providers()
 
     ---@type loopdebug.session.DataProviders
     return {
+        breakpoints_command = breakpoint_command,
         threads_provider = threads_provider,
         stack_provider = stack_provider,
         scopes_provider = scopes_provider,
@@ -282,29 +294,9 @@ function Session:get_data_providers()
     return self._data_providers
 end
 
-function Session:_start_tracking_breakpoints()
-    assert(not self._can_send_breakpoints)
-
-    if self._breakpoints_tracker_id ~= 0 then
-        return
-    end
-    self._breakpoints_tracker_id = breakpoints.add_tracker({
-        on_added = function(bp) self:_set_source_breakpoint(bp) end,
-        on_removed = function(bp) self:_remove_breakpoint(bp.id) end,
-        on_all_removed = function(bpts) self:_remove_all_breakpoints(bpts) end
-    })
-end
-
-function Session:stop_tracking_breakpoints()
-    if self._breakpoints_tracker_id ~= 0 then
-        local removed = breakpoints.remove_tracker(self._breakpoints_tracker_id)
-        assert(removed)
-        self._breakpoints_tracker_id = 0
-    end
-end
-
 ---@param breakpoint loopdebug.SourceBreakpoint
 function Session:_set_source_breakpoint(breakpoint)
+    -- TODO: handle already sent breakpoints
     local data = self._source_breakpoints
     ---@type loopdebug.session.SourceBPData
     local pbdata = { user_data = breakpoint, verified = false, dap_id = nil }
@@ -340,8 +332,7 @@ function Session:_remove_breakpoint(id)
     end
 end
 
----@param bpts loopdebug.SourceBreakpoint[]
-function Session:_remove_all_breakpoints(bpts)
+function Session:_remove_all_breakpoints()
     local data = self._source_breakpoints
     for file, _ in pairs(data.by_location) do
         data.pending_files[file] = true
@@ -499,11 +490,17 @@ function Session:_on_startDebugging_request(req_args, on_success, on_failure)
         debug_args = {
             adapter = vim.deepcopy(self._args.debug_args.adapter),
             request = req_args.request,
-            request_args = req_args.configuration
+            request_args = req_args.configuration,
+            initial_breakpoints = {},
         },
         on_success = on_success,
         on_failure = on_failure
     }
+    for _, bp_data in pairs(self._source_breakpoints.by_usr_id) do
+        ---@type loopdebug.SourceBreakpoint
+        local bp = bp_data.user_data
+        table.insert(data.debug_args.initial_breakpoints, bp)
+    end
     self:_notify_tracker("subsession_request", data)
 end
 
@@ -673,8 +670,6 @@ end
 function Session:_on_initializing_state()
     self:_notify_about_state()
 
-    self:_start_tracking_breakpoints() -- must be done before _can_send_breakpoints = true
-
     local on_complete = function(success)
         if not success then
             self._fsm:trigger(fsmdata.trigger.initialize_resp_err)
@@ -843,7 +838,6 @@ end
 
 function Session:_on_ended_state()
     self._can_send_breakpoints = false
-    self:stop_tracking_breakpoints()
     self:_notify_about_state()
     self._base_session:terminate()
 end

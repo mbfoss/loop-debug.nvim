@@ -143,16 +143,8 @@ function M.toggle()
     end
     _manager_tracker_id = manager.add_tracker({
         on_job_update = function(update)
-            if update.session_id and update.sess_name and update.data_providers and update.cur_frame then
-                variables_comp:update_data(update.session_id, update.sess_name, update.data_providers, update.cur_frame)
-            else
-                variables_comp:greyout_content(update.session_id)
-            end
-            if update.data_providers and update.cur_thread_id then
-                stacktrace_comp:update_data(update.data_providers, update.cur_thread_id, update.cur_thread_name)
-            else
-                stacktrace_comp:greyout_content()
-            end
+            variables_comp:update_data(update.session_id, update.sess_name, update.data_providers, update.cur_frame)
+            stacktrace_comp:update_data(update.data_providers, update.cur_thread_id, update.cur_thread_name)
         end
     })
 
