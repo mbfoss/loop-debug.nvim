@@ -100,8 +100,8 @@ function StackTrace:init()
         end,
     })
 
-    ---@type number?
-    self._events_tracker_id = debugevents.add_tracker({
+    ---@type loop.TrackerRef?
+    self._events_tracker_ref = debugevents.add_tracker({
         on_debug_start = function()
             self:set_items({})
         end,
@@ -115,9 +115,8 @@ function StackTrace:init()
 end
 
 function StackTrace:dispose()
-    if self._events_tracker_id then
-        debugevents.remove_tracker(self._events_tracker_id)
-        self._events_tracker_id = nil
+    if self._events_tracker_ref then
+        self._events_tracker_ref.cancel()
     end
 end
 

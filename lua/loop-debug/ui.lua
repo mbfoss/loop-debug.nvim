@@ -1,11 +1,11 @@
-local M              = {}
+local M               = {}
 
-local persistence = require('loop-debug.persistence')
-local CompBuffer     = require('loop.buf.CompBuffer')
-local VariablesComp  = require('loop-debug.comp.Variables')
-local StackTraceComp = require('loop-debug.comp.StackTrace')
+local persistence     = require('loop-debug.persistence')
+local CompBuffer      = require('loop.buf.CompBuffer')
+local VariablesComp   = require('loop-debug.comp.Variables')
+local StackTraceComp  = require('loop-debug.comp.StackTrace')
 
-local _ui_auto_group = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
+local _ui_auto_group  = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
 
 ---@type loop.comp.CompBuffer?
 local _vars_compbuffer
@@ -18,6 +18,27 @@ local _variables_comp
 
 ---@type loopdebug.comp.StackTrace?
 local _stack_comp
+
+-- Configuration and State Storage
+local _default_layout = {
+    width_ratio = 0.20,
+    top_ratio = 0.5,
+}
+
+---@param winid number
+local function _save_layout(winid)
+    local total_cols = vim.o.columns
+    local total_lines = vim.o.lines
+    local w = vim.api.nvim_win_get_width(winid)
+    local h = vim.api.nvim_win_get_height(winid)
+    local is_width_valid = w < math.floor(total_cols * 0.6)
+    local is_height_valid = h < math.floor(total_lines * 0.9)
+
+    local layout = {}
+    if is_width_valid then layout.width_ratio = (w / vim.o.columns) end
+    if is_height_valid then layout.top_ratio = (h / vim.o.lines) end
+    persistence.set_config("layout", layout)
+end
 
 local function _destroy_components()
     if _vars_compbuffer then
@@ -65,11 +86,6 @@ local function _create_components(vars_winid, stack_winid)
     _stacktrace_comp:link_to_buffer(_stack_compbuffer:make_controller())
 end
 
--- Configuration and State Storage
-_layout_config   = {
-    width_ratio = 0.20,
-    top_ratio = 0.5,
-}
 
 -- Unique keys for window variables
 local KEY_MARKER = "loopdebugplugin_debugpanel"
@@ -91,15 +107,6 @@ local function get_managed_windows()
     return found
 end
 
-function M.get_layout_config()
-    return _layout_config
-end
-
-function M.set_layout_config(cfg)
-    _layout_config = cfg or {}
-    _layout_config.width_ratio = _layout_config.width_ratio or 0.20
-end
-
 function M.toggle()
     local managed = get_managed_windows()
     if #managed > 0 then
@@ -111,27 +118,27 @@ function M.toggle()
         return
     end
 
-    if not persistence.is_ws_open() then
-        vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
-        return
-    end
+    --if not persistence.is_ws_open() then
+    --    vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
+    --    return
+    --end
+
+    local layout = vim.tbl_deep_extend("force", _default_layout, persistence.get_config("layout") or {})
 
     local original_win = vim.api.nvim_get_current_win()
 
     -- 1. Create the Vertical container
     vim.cmd("topleft vsplit")
     local top_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_width(top_win, math.floor(_layout_config.width_ratio * vim.o.columns))
+    vim.api.nvim_win_set_width(top_win, math.floor(layout.width_ratio * vim.o.columns))
 
     -- 2. Create the Horizontal split
     vim.cmd("below split")
     local bottom_win = vim.api.nvim_get_current_win()
 
     -- 3. Restore Height with validation
-    if _layout_config.top_ratio then
-        local height = math.floor(vim.o.lines * _layout_config.top_ratio)
-        vim.api.nvim_win_set_height(top_win, height)
-    end
+    local height = math.floor(vim.o.lines * layout.top_ratio)
+    vim.api.nvim_win_set_height(top_win, height)
 
     local config_map = {
         [top_win] = "TOP",
@@ -165,14 +172,7 @@ function M.toggle()
                 if is_managed_window(winid) then
                     local type = vim.w[winid].loopdebugplugin_panel_type
                     if type == "TOP" then
-                        local total_cols = vim.o.columns
-                        local total_lines = vim.o.lines
-                        local w = vim.api.nvim_win_get_width(winid)
-                        local h = vim.api.nvim_win_get_height(winid)
-                        local is_width_valid = w < math.floor(total_cols * 0.6)
-                        local is_height_valid = h < math.floor(total_lines * 0.9)
-                        if is_width_valid then _layout_config.width_ratio = (w / vim.o.columns) end
-                        if is_height_valid then _layout_config.top_ratio = (h / vim.o.lines) end
+                        _save_layout(winid)
                     end
                 end
             end

@@ -57,15 +57,9 @@ function DebugJob:init(name)
 end
 
 ---@param callbacks loop.job.debugjob.Tracker>
----@return number
+---@return loop.TrackerRef
 function DebugJob:add_tracker(callbacks)
     return self._trackers:add_tracker(callbacks)
-end
-
----@param id number
----@return boolean
-function DebugJob:remove_tracker(id)
-    return self._trackers:remove_tracker(id)
 end
 
 ---@return boolean

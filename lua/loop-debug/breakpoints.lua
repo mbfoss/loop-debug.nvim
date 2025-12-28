@@ -1,9 +1,10 @@
 local M = {}
 
 
-local Trackers = require("loop.tools.Trackers")
-local uitools  = require("loop.tools.uitools")
-local wsinfo   = require('loop.wsinfo')
+local Trackers    = require("loop.tools.Trackers")
+local uitools     = require("loop.tools.uitools")
+local wsinfo      = require('loop.wsinfo')
+local persistence = require('loop-debug.persistence')
 
 ---@class loopdebug.SourceBreakpoint
 ---@field id number
@@ -36,9 +37,9 @@ local _trackers = Trackers:new()
 local _need_saving = false
 
 ---@param callbacks loopdebug.breakpoints.Tracker
----@return number
+---@return loop.TrackerRef
 function M.add_tracker(callbacks)
-    local tracker_id = _trackers:add_tracker(callbacks)
+    local tracker_ref = _trackers:add_tracker(callbacks)
     --initial snapshot
     ---@type loopdebug.SourceBreakpoint[]
     local current = vim.tbl_values(_by_id)
@@ -51,13 +52,7 @@ function M.add_tracker(callbacks)
             callbacks.on_added(bp)
         end
     end
-    return tracker_id
-end
-
----@param id number
----@return boolean
-function M.remove_tracker(id)
-    return _trackers:remove_tracker(id)
+    return tracker_ref
 end
 
 local function _norm(file)
@@ -253,45 +248,13 @@ function M.for_each(handler)
     end
 end
 
----@param bp loopdebug.SourceBreakpoint
----@param verified boolean
-local function _format_breakpoint(bp, verified)
-    local symbol = verified and "●" or "○"
-    if bp.logMessage and bp.logMessage ~= "" then
-        symbol = "▶" -- logpoint
-    end
-    if bp.condition and bp.condition ~= "" then
-        symbol = "◆" -- conditional
-    end
-    if bp.hitCondition and bp.hitCondition ~= "" then
-        symbol = "▲" -- hit-condition
-    end
-    local file = bp.file
-    local wsdir = wsinfo.get_ws_dir()
-    if wsdir then
-        file = vim.fs.relpath(wsdir, file) or file
-    end
-    local parts = { symbol }
-    table.insert(parts, " ")
-    table.insert(parts, file)
-    table.insert(parts, ":")
-    table.insert(parts, tostring(bp.line))
-    -- 3. Optional qualifiers
-    if bp.condition and bp.condition ~= "" then
-        table.insert(parts, " | if " .. bp.condition)
-    end
-    if bp.hitCondition and bp.hitCondition ~= "" then
-        table.insert(parts, " | hits=" .. bp.hitCondition)
-    end
-    if bp.logMessage and bp.logMessage ~= "" then
-        table.insert(parts, " | log: " .. bp.logMessage:gsub("\n", " "))
-    end
-    return table.concat(parts, '')
-end
-
+--[[
 function _select_breakpoint()
+    local data = persistence.get_config("breakpoints")
+    if not data then return end
+    ---@cast data loopdebug.SourceBreakpoint[]
     local choices = {}
-    for _, data in pairs(_breakpoints_data) do
+    for _, bp in pairs(data) do
         local verified = _get_breakpoint_state(data)
         local item = {
             label = _format_breakpoint(data.breakpoint, verified),
@@ -306,6 +269,7 @@ function _select_breakpoint()
         end
     end)
 end
+]]--
 
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
@@ -349,7 +313,7 @@ function M.breakpoints_command(command)
             end
         end)
     elseif command == "list" then
-        _select_breakpoint()
+        --_select_breakpoint()
     else
         vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
     end

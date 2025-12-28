@@ -31,6 +31,42 @@ local _breakpoints_data = {}
 
 ---@param bp loopdebug.SourceBreakpoint
 ---@param verified boolean
+local function _format_breakpoint(bp, verified)
+    local symbol = verified and "●" or "○"
+    if bp.logMessage and bp.logMessage ~= "" then
+        symbol = "▶" -- logpoint
+    end
+    if bp.condition and bp.condition ~= "" then
+        symbol = "◆" -- conditional
+    end
+    if bp.hitCondition and bp.hitCondition ~= "" then
+        symbol = "▲" -- hit-condition
+    end
+    local file = bp.file
+    local wsdir = wsinfo.get_ws_dir()
+    if wsdir then
+        file = vim.fs.relpath(wsdir, file) or file
+    end
+    local parts = { symbol }
+    table.insert(parts, " ")
+    table.insert(parts, file)
+    table.insert(parts, ":")
+    table.insert(parts, tostring(bp.line))
+    -- 3. Optional qualifiers
+    if bp.condition and bp.condition ~= "" then
+        table.insert(parts, " | if " .. bp.condition)
+    end
+    if bp.hitCondition and bp.hitCondition ~= "" then
+        table.insert(parts, " | hits=" .. bp.hitCondition)
+    end
+    if bp.logMessage and bp.logMessage ~= "" then
+        table.insert(parts, " | log: " .. bp.logMessage:gsub("\n", " "))
+    end
+    return table.concat(parts, '')
+end
+
+---@param bp loopdebug.SourceBreakpoint
+---@param verified boolean
 ---@return string
 local function _get_breakpoint_sign(bp, verified)
     -- Determine the sign type based on breakpoint fields

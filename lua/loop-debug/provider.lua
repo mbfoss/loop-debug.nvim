@@ -4,14 +4,11 @@ local persistence = require('loop-debug.persistence')
 ---@type loop.TaskProvider
 local task_provider =
 {
-    get_state = function()
-        return persistence.get_data()
-    end,
-    on_workspace_open = function(ws_dir, state)
-        persistence.on_workspace_open(ws_dir, state)
+    on_workspace_open = function(ws_dir, store)
+        persistence.on_workspace_open(ws_dir, store)
     end,
     on_workspace_closed = function(ws_dir)
-        persistence.on_workspace_close()
+        persistence.on_workspace_closed()
     end,
     get_task_schema = function()
         local schema = require('loop-debug.schema')

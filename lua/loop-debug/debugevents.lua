@@ -32,6 +32,21 @@ local _sessions = {}
 ---@type loopdebug.events.CurrentViewUpdate?
 local _current_view
 
+---@param callbacks loopdebug.events.Tracker
+---@return loop.TrackerRef
+function M.add_tracker(callbacks)
+    local tracker_ref = _trackers:add_tracker(callbacks)
+    if callbacks.on_session_added then
+        for id, info in pairs(_sessions) do
+            callbacks.on_session_added(id, info)
+        end
+    end
+    if _current_view and callbacks.on_view_udpate then
+        callbacks.on_view_udpate(_current_view)
+    end
+    return tracker_ref
+end
+
 function M.report_debug_start()
     _sessions = {}
     _current_view = nil
@@ -68,27 +83,6 @@ end
 function M.report_view_update(view)
     _current_view = view
     _trackers:invoke("on_view_udpate", view);
-end
-
----@param callbacks loopdebug.events.Tracker
----@return number
-function M.add_tracker(callbacks)
-    local tracker_id = _trackers:add_tracker(callbacks)
-    if callbacks.on_session_added then
-        for id, info in pairs(_sessions) do
-            callbacks.on_session_added(id, info)
-        end
-    end
-    if _current_view and callbacks.on_view_udpate then
-        callbacks.on_view_udpate(_current_view)
-    end
-    return tracker_id
-end
-
----@param id number
----@return boolean
-function M.remove_tracker(id)
-    return _trackers:remove_tracker(id)
 end
 
 return M

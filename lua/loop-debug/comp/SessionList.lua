@@ -32,8 +32,8 @@ function SessionListComp:init()
     ---@type number?
     self._current_sess_id = nil
 
-    ---@type number?
-    self._events_tracker_id = debugevents.add_tracker({
+    ---@type loop.TrackerRef?
+    self._events_tracker_ref = debugevents.add_tracker({
         on_debug_start = function()
             self._sessions = {}
             self._job_result = nil
@@ -64,9 +64,8 @@ end
 
 function SessionListComp:dispose()
     ItemList.dispose(self)
-    if self._events_tracker_id then
-        debugevents.remove_tracker(self._events_tracker_id)
-        self._events_tracker_id = nil
+    if self._events_tracker_ref then
+        self._events_tracker_ref.cancel()
     end
 end
 

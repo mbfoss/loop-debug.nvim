@@ -1,7 +1,7 @@
 local class        = require('loop.tools.class')
 local ItemTreeComp = require('loop.comp.ItemTree')
 local strtools     = require('loop.tools.strtools')
-local watchexpr    = require('loop-debug.watchexpr')
+local persistence  = require('loop-debug.persistence')
 local floatwin     = require('loop-debug.tools.floatwin')
 local daptools     = require('loop-debug.dap.daptools')
 local debugevents  = require('loop-debug.debugevents')
@@ -36,6 +36,57 @@ local function _preview_string(str, max_len)
     local preview = str:sub(1, max_len):gsub("\n", "⏎")
     preview = vim.fn.trim(preview, "", 2) .. "…"
     return preview, true
+end
+
+---@param expr string
+---@return boolean
+function _add_watch_expr(expr)
+    local data = persistence.get_config("watch")
+    if data then
+        ---@cast data string[]
+        for _, v in ipairs(data) do
+            if v == expr then return false end
+        end
+        table.insert(data, expr)
+        persistence.set_config("watch", data)
+        return true
+    end
+    return false
+end
+
+---@param old string
+---@param new string
+---@return boolean
+function _replace_watch_expr(old, new)
+    local data = persistence.get_config("watch")
+    if data then
+        ---@cast data string[]
+        for i, v in ipairs(data) do
+            if v == old then
+                data[i] = new
+                persistence.set_config("watch", data)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+---@param expr string
+---@return boolean
+function _remove_watch_expr(expr)
+    local data = persistence.get_config("watch")
+    if data then
+        ---@cast data string[]
+        for i, v in ipairs(data) do
+            if v == expr then
+                table.remove(data, i)
+                persistence.set_config("watch", data)
+                return true
+            end
+        end
+    end
+    return false
 end
 
 ---@param watch_root boolean
@@ -151,32 +202,40 @@ function Variables:init()
         end
     })
 
-    self:_upsert_watch_root() -- ensure this exists at the top
-    self:_load_watch_expressions(self._query_context)
-
-    ---@type number?
-    self._events_tracker_id = debugevents.add_tracker({
+    ---@type loop.TrackerRef?
+    self._events_tracker_ref = debugevents.add_tracker({
         on_debug_start = function()
         end,
         on_debug_end = function()
-        end,        
+        end,
         on_session_added = function(id, info)
             self:_load_watch_expressions(self._query_context)
         end,
         on_session_removed = function(id)
         end,
-        on_view_udpate =function (view)
+        on_view_udpate = function(view)
             self._query_context = self._query_context + 1
             self:_update_data(self._query_context, view)
+        end
+    })
+
+    self._persistence_tracker_ref = persistence.add_tracker({
+        on_ws_open = function()
+            self:_load_watch_expressions(self._query_context)
+        end,
+        on_ws_closed = function()
+            self:clear_items()
         end
     })
 end
 
 function Variables:dispose()
     ItemTreeComp.dispose(self)
-    if self._events_tracker_id then
-        debugevents.remove_tracker(self._events_tracker_id)
-        self._events_tracker_id = nil
+    if self._events_tracker_ref then
+        self._events_tracker_ref.cancel()
+    end
+    if self._persistence_tracker_ref then
+        self._persistence_tracker_ref.cancel()
     end
 end
 
@@ -201,7 +260,6 @@ function Variables:_update_data(ctx, view)
     self:_load_watch_expressions(ctx)
     self:_load_session_vars(ctx)
 end
-
 
 ---@param context number
 ---@param data_providers loopdebug.session.DataProviders
@@ -316,15 +374,14 @@ function Variables:link_to_buffer(comp)
             on_confirm = function(expr)
                 if not expr then return end
                 if not item then
-                    local added = watchexpr.add(expr)
-                    if added then
+                    if _add_watch_expr(expr) then
                         self:_load_watch_expr_value(self._query_context, expr)
                     end
                 elseif item.data and item.data.name and expr ~= item.data.name then
-                    watchexpr.remove(item.data.name)
-                    watchexpr.add(expr)
-                    item.data.name = expr
-                    self:_load_watch_expr_value(expr, item.id)
+                    if _replace_watch_expr(item.data.name, expr) then
+                        item.data.name = expr
+                        self:_load_watch_expr_value(self._query_context, expr, item.id)
+                    end
                 end
             end
         })
@@ -352,7 +409,7 @@ function Variables:link_to_buffer(comp)
             local cur_item = self:get_cur_item(comp)
             if not cur_item then return end
             if not cur_item.data.is_expr then return end
-            watchexpr.remove(cur_item.data.name)
+            _remove_watch_expr(cur_item.data.name)
             self._layout_cache[cur_item.id] = nil
             self:remove_item(cur_item.id)
         end,
@@ -362,20 +419,22 @@ end
 ---@return any root_id
 function Variables:_upsert_watch_root()
     local id = _get_root_id(true)
-    ---@type loop.comp.ItemTree.Item
-    local root_item = {
-        id = id,
-        expanded = true,
-        data = { scopelabel = "Watch" }
-    }
-    self:upsert_item(root_item)
+    if not self:get_item(id) then
+        ---@type loop.comp.ItemTree.Item
+        local root_item = {
+            id = id,
+            expanded = true,
+            data = { scopelabel = "Watch" }
+        }
+        self:upsert_item(root_item)
+    end
     return id
 end
 
 ---@param context number
 ---@param expr string
----@param forced_id any
 function Variables:_load_watch_expr_value(context, expr, forced_id)
+    if not persistence.is_ws_open() then return end
     local parent_id = self:_upsert_watch_root()
     local exising_items = self:get_item_and_children(parent_id)
     local item_id = forced_id
@@ -433,8 +492,14 @@ end
 
 ---@param context number
 function Variables:_load_watch_expressions(context)
-    ---@type loop.comp.ItemTree.Item[]
-    for _, expr in ipairs(watchexpr.get()) do
+    if not persistence.is_ws_open() then return end    
+    local root_id = self:_upsert_watch_root()
+    local list = persistence.get_config("watch")
+    if not list then
+        return
+    end
+    ---@cast list string[]
+    for _, expr in ipairs(list) do
         self:_load_watch_expr_value(context, expr)
     end
 end
