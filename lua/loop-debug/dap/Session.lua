@@ -1,6 +1,5 @@
 local class = require('loop.tools.class')
 local strtools = require('loop.tools.strtools')
-local daptools = require("loop-debug.dap.daptools")
 
 local BaseSession = require("loop-debug.dap.BaseSession")
 local FSM = require("loop-debug.tools.FSM")
@@ -49,11 +48,11 @@ function Session:_create_data_providers()
     ---@type loopdebug.session.BreakpointsCommand
     local breakpoint_command = function(cmd, bp)
         if cmd == "add" then
-            self:_set_source_breakpoint(bp)
+            self:set_source_breakpoint(bp)
         elseif cmd == "remove" then
-            self:_remove_breakpoint(bp.id)
+            self:remove_breakpoint(bp.id)
         elseif cmd == "remove_all" then
-            self:_remove_all_breakpoints()
+            self:remove_all_breakpoints()
         else
             assert(false)
         end
@@ -295,8 +294,7 @@ function Session:get_data_providers()
 end
 
 ---@param breakpoint loopdebug.SourceBreakpoint
-function Session:_set_source_breakpoint(breakpoint)
-    -- TODO: handle already sent breakpoints
+function Session:set_source_breakpoint(breakpoint)
     local data = self._source_breakpoints
     ---@type loopdebug.session.SourceBPData
     local pbdata = { user_data = breakpoint, verified = false, dap_id = nil }
@@ -310,7 +308,7 @@ function Session:_set_source_breakpoint(breakpoint)
 end
 
 ---@param id number
-function Session:_remove_breakpoint(id)
+function Session:remove_breakpoint(id)
     local data = self._source_breakpoints
     local bp = data.by_usr_id[id]
     if bp then
@@ -332,7 +330,7 @@ function Session:_remove_breakpoint(id)
     end
 end
 
-function Session:_remove_all_breakpoints()
+function Session:remove_all_breakpoints()
     local data = self._source_breakpoints
     for file, _ in pairs(data.by_location) do
         data.pending_files[file] = true
@@ -491,16 +489,10 @@ function Session:_on_startDebugging_request(req_args, on_success, on_failure)
             adapter = vim.deepcopy(self._args.debug_args.adapter),
             request = req_args.request,
             request_args = req_args.configuration,
-            initial_breakpoints = {},
         },
         on_success = on_success,
         on_failure = on_failure
     }
-    for _, bp_data in pairs(self._source_breakpoints.by_usr_id) do
-        ---@type loopdebug.SourceBreakpoint
-        local bp = bp_data.user_data
-        table.insert(data.debug_args.initial_breakpoints, bp)
-    end
     self:_notify_tracker("subsession_request", data)
 end
 

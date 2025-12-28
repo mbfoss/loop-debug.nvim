@@ -10,6 +10,7 @@ local Trackers  = require("loop.tools.Trackers")
 
 ---@class loopdebug.events.CurrentViewUpdate
 ---@field session_id number?
+---@field session_name string?
 ---@field data_providers loopdebug.session.DataProviders?
 ---@field thread_id number|nil
 ---@field thread_name string|nil

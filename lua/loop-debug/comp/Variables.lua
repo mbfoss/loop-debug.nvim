@@ -188,7 +188,7 @@ function Variables:init()
     ---@type number
     self._query_context = 0
 
-    ---@type loopdebug.comp.Vars.DataSource|nil
+    ---@type loopdebug.events.CurrentViewUpdate|nil
     self._current_data_source = nil
 
     ---@type table<any,boolean> -- id --> expanded
@@ -214,8 +214,9 @@ function Variables:init()
         on_session_removed = function(id)
         end,
         on_view_udpate = function(view)
+            self._current_data_source = view
             self._query_context = self._query_context + 1
-            self:_update_data(self._query_context, view)
+            self:_update_data(self._query_context)
         end
     })
 
@@ -225,6 +226,8 @@ function Variables:init()
         end,
         on_ws_closed = function()
             self:clear_items()
+        end,
+        on_ws_will_save = function()
         end
     })
 end
@@ -254,8 +257,7 @@ function Variables:_greyout_content()
 end
 
 ---@param ctx number
----@param view loopdebug.events.CurrentViewUpdate
-function Variables:_update_data(ctx, view)
+function Variables:_update_data(ctx)
     self:_greyout_content()
     self:_load_watch_expressions(ctx)
     self:_load_session_vars(ctx)
@@ -456,7 +458,7 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
     }
 
     local data_source = self._current_data_source
-    if not data_source then
+    if not data_source or not data_source.frame or not data_source.data_providers then
         var_item.data.value = "not available"
         var_item.data.is_na = true
         self:upsert_item(var_item)
@@ -492,7 +494,7 @@ end
 
 ---@param context number
 function Variables:_load_watch_expressions(context)
-    if not persistence.is_ws_open() then return end    
+    if not persistence.is_ws_open() then return end
     local root_id = self:_upsert_watch_root()
     local list = persistence.get_config("watch")
     if not list then
@@ -508,24 +510,44 @@ end
 function Variables:_load_session_vars(context)
     local data_source = self._current_data_source
     if not data_source then return end
+
+    local root_id = _get_root_id(false, data_source.session_id)
+
+    if not data_source.frame or not data_source.data_providers then
+        local items = self:get_item_and_children(root_id)
+        for _, item in ipairs(items) do
+            item.data.greyout = true
+        end
+        self:refresh_content()
+        return
+    end
+
     ---@type loop.comp.ItemTree.Item
     local root_item = {
-        id = _get_root_id(false, data_source.sess_id),
+        id = root_id,
         expanded = true,
-        data = { scopelabel = "Session: " .. data_source.sess_name }
+        data = { scopelabel = "Session: " .. data_source.session_name }
     }
+    ---@return loop.comp.ItemTree.Item
+    local function make_na_item()
+        return {
+            id = {}, -- a unique id
+            data = { is_na = true },
+        }
+    end
     root_item.children_callback = function(cb)
+        if not self:is_current_context(context) or not data_source.frame then
+            cb({ make_na_item() })
+            return
+        end
         data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
-            if not self:is_current_context(context) then return end
+            if not self:is_current_context(context) then
+                return
+            end
             if scopes_data and scopes_data.scopes then
                 self:_load_scopes(context, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
             else
-                ---@type loop.comp.ItemTree.Item
-                local scope_item = {
-                    id = {}, -- a unique id
-                    data = { is_na = true },
-                }
-                cb({ scope_item })
+                cb({ make_na_item() })
             end
         end)
     end

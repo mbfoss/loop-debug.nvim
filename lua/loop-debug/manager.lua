@@ -132,6 +132,7 @@ local function _report_current_view(jobdata)
     end
     debugevents.report_view_update({
         session_id = sess_id,
+        session_name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
         thread_id = sess_data.cur_thread_id,
         thread_name = sess_data.thread_names[sess_data.cur_thread_id],

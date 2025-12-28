@@ -23,9 +23,16 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     --notifications.notify("Starting job:\n" .. vim.inspect(start_args))
     local job = DebugJob:new(args.name)
 
+    local bpts_tracker_ref = breakpoints.add_tracker({
+        on_added = function(bp) job:add_breakpoint(bp) end,
+        on_removed = function(bp) job:remove_breakpoint(bp) end,
+        on_all_removed = function(bpts) job:remove_all_breakpoints(bpts) end
+    })
+
     -- Add trackers
     job:add_tracker(manager.track_new_debugjob(args.name, page_manager))
     job:add_tracker({ on_exit = exit_handler })
+    job:add_tracker({ on_exit = function() bpts_tracker_ref:cancel() end })
 
     -- Start the debug job
     local ok, err = job:start(args)
@@ -123,7 +130,6 @@ function M.start_debug_task(task, page_manager, on_exit)
             request = task.request,
             request_args = request_args,
             terminate_debuggee = task.terminateOnDisconnect,
-            initial_breakpoints = breakpoints.get_breakpoints()
         },
     }
 

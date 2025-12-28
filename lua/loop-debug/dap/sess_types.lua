@@ -54,7 +54,6 @@ error('Cannot require a meta file')
 ---@field request_args  loopdebug.proto.AttachRequestArguments|loopdebug.proto.LaunchRequestArguments|nil
 ---@field launch_post_configure boolean|nil
 ---@field terminate_debuggee boolean|nil
----@field initial_breakpoints loopdebug.SourceBreakpoint[]
 
 ---@class loopdebug.session.Args
 ---@field debug_args loopdebug.session.DebugArgs|nil

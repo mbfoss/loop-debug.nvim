@@ -22,7 +22,6 @@ function M.init()
     signsmgr.define_sign_group(_sign_group, config.current and config.current.sign_priority.currentframe or 13)
     signsmgr.define_sign(_sign_group, _sign_name, "▶", highlight)
 
-
     debugevents.add_tracker({
         on_debug_start = function()
 

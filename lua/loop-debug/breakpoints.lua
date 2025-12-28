@@ -32,24 +32,23 @@ local _by_id = {} -- breakpoints by unique id
 ---@type loop.tools.Trackers<loopdebug.breakpoints.Tracker>
 local _trackers = Trackers:new()
 
---- Tracks whether breakpoints need to be saved to disk.
----@type boolean
-local _need_saving = false
-
 ---@param callbacks loopdebug.breakpoints.Tracker
+---@param no_snapshot boolean?
 ---@return loop.TrackerRef
-function M.add_tracker(callbacks)
+function M.add_tracker(callbacks, no_snapshot)
     local tracker_ref = _trackers:add_tracker(callbacks)
-    --initial snapshot
-    ---@type loopdebug.SourceBreakpoint[]
-    local current = vim.tbl_values(_by_id)
-    table.sort(current, function(a, b)
-        if a.file ~= b.file then return a.file < b.file end
-        return a.line < b.line
-    end)
-    if callbacks.on_added then
-        for _, bp in ipairs(current) do
-            callbacks.on_added(bp)
+    if not no_snapshot then
+        --initial snapshot
+        ---@type loopdebug.SourceBreakpoint[]
+        local current = vim.tbl_values(_by_id)
+        table.sort(current, function(a, b)
+            if a.file ~= b.file then return a.file < b.file end
+            return a.line < b.line
+        end)
+        if callbacks.on_added then
+            for _, bp in ipairs(current) do
+                callbacks.on_added(bp)
+            end
         end
     end
     return tracker_ref
@@ -98,7 +97,6 @@ local function _remove_source_breakpoint(file, line)
         _by_id[id] = nil
         _trackers:invoke("on_removed", bp)
     end
-    _need_saving = true
     return true
 end
 
@@ -128,7 +126,6 @@ local function _clear_breakpoints()
     local removed = vim.tbl_values(_by_id)
     _by_id = {}
     _source_breakpoints = {}
-    _need_saving = true
     _trackers:invoke("on_all_removed", removed)
 end
 
@@ -162,8 +159,6 @@ local function _add_source_breakpoint(file, line, condition, hitCondition, logMe
     _source_breakpoints[file] = _source_breakpoints[file] or {}
     local lines = _source_breakpoints[file]
     lines[line] = id
-
-    _need_saving = true
 
     _trackers:invoke("on_added", bp)
 
@@ -219,7 +214,7 @@ function M.get_breakpoints()
 end
 
 ---@param breakpoints loopdebug.SourceBreakpoint[]
-function M.set_breakpoints(breakpoints)
+function _set_breakpoints(breakpoints)
     _clear_breakpoints()
 
     table.sort(breakpoints, function(a, b)
@@ -232,7 +227,6 @@ function M.set_breakpoints(breakpoints)
         _add_source_breakpoint(file, bp.line, bp.condition, bp.hitCondition, bp.logMessage)
     end
 
-    _need_saving = false
     return true, nil
 end
 
@@ -269,7 +263,7 @@ function _select_breakpoint()
         end
     end)
 end
-]]--
+]] --
 
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
@@ -317,6 +311,22 @@ function M.breakpoints_command(command)
     else
         vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
     end
+end
+
+function M.init()
+    if _init_done then return end
+    _init_done = true
+
+    persistence.add_tracker({
+        on_ws_open = function()
+            _set_breakpoints(persistence.get_config("breakpoints") or {})
+        end,
+        on_ws_closed = function()
+        end,
+        on_ws_will_save = function()
+            persistence.set_config("breakpoints", M.get_breakpoints())
+        end
+    })
 end
 
 return M

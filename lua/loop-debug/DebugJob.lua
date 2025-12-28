@@ -51,6 +51,8 @@ function DebugJob:init(name)
     ---@type table<number,loopdebug.Session>
     self._sessions = {}
     self._last_session_id = 0
+    ---@type table<number,loopdebug.SourceBreakpoint>
+    self._breakpoints = {}
     self._output_pages = {}
     self._stacktrace_pages = {}
     self._trackers = Trackers:new()
@@ -134,6 +136,10 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
 
     local data_providers       = session:get_data_providers()
 
+    for _, bp in pairs(self._breakpoints) do
+        session:set_source_breakpoint(bp)
+    end
+
     self._trackers:invoke("on_sess_added", session_id, name, parent_sess_id, controller, data_providers)
 
     local started, start_err = session:start(session_args)
@@ -142,6 +148,30 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
     end
 
     return true, nil
+end
+
+---@param bp loopdebug.SourceBreakpoint
+function DebugJob:add_breakpoint(bp)
+    self._breakpoints[bp.id] = bp
+    for _, s in pairs(self._sessions) do
+        s:set_source_breakpoint(bp)
+    end
+end
+
+---@param bp loopdebug.SourceBreakpoint
+function DebugJob:remove_breakpoint(bp)
+    self._breakpoints[bp.id] = nil
+    for _, s in pairs(self._sessions) do
+        s:remove_breakpoint(bp.id)
+    end
+end
+
+---@param removed loopdebug.SourceBreakpoint[]
+function DebugJob:remove_all_breakpoints(removed)
+    self._breakpoints = {}
+    for _, s in pairs(self._sessions) do
+        s:remove_all_breakpoints()
+    end
 end
 
 function DebugJob:_session_exit_handler(session_id, code)
