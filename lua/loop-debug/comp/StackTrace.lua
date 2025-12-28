@@ -1,7 +1,7 @@
 local class = require('loop.tools.class')
 local ItemListComp = require('loop.comp.ItemList')
 local config = require('loop-debug.config')
-local selector = require('loop.tools.selector')
+local debugevents = require('loop-debug.debugevents')
 local Trackers = require("loop.tools.Trackers")
 
 ---@class loopdebug.comp.StackTrace : loop.comp.ItemList
@@ -9,9 +9,9 @@ local Trackers = require("loop.tools.Trackers")
 local StackTrace = class(ItemListComp)
 
 ---@param item loop.comp.ItemList.Item
----@param highlights loop.comp.ItemList.Highlight[]
+---@param highlights loop.Highlight[]
 local function _item_formatter(item, highlights)
-    ---@type loop.comp.ItemList.Highlight[]
+    ---@type loop.Highlight[]
     local hls = {}
 
     local frame = item.data.frame
@@ -99,6 +99,26 @@ function StackTrace:init()
             end
         end,
     })
+
+    ---@type number?
+    self._events_tracker_id = debugevents.add_tracker({
+        on_debug_start = function()
+            self:set_items({})
+        end,
+        on_debug_end = function(success)
+            self:set_items({})
+        end,
+        on_view_udpate = function(view)
+            self:_update_data(view)
+        end
+    })
+end
+
+function StackTrace:dispose()
+    if self._events_tracker_id then
+        debugevents.remove_tracker(self._events_tracker_id)
+        self._events_tracker_id = nil
+    end
 end
 
 ---@param callback fun(frame:loopdebug.proto.StackFrame)
@@ -108,26 +128,28 @@ function StackTrace:add_frame_tracker(callback)
     })
 end
 
----@param data loopdebug.session.DataProviders
----@param thread_id number?
----@param thread_name string?
-function StackTrace:update_data(data, thread_id, thread_name)
-    if not thread_id then
-        self:_greyout_content()
+---@param view loopdebug.events.CurrentViewUpdate
+function StackTrace:_update_data(view)
+    if not view.thread_id then
+        local items = self:get_items()
+        for _, item in ipairs(items) do
+            item.data.greyout = true
+        end
+        self:refresh_content()
         return
     end
     self._query_context = self._query_context + 1
     local context = self._query_context
-    data.stack_provider({
-            threadId = thread_id,
+    view.data_providers.stack_provider({
+            threadId = view.thread_id,
             levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
             if context ~= self._query_context then return end
-            local text = "Thread: " .. (thread_name or tostring(thread_id))
+            local text = "Thread: " .. (view.thread_name or tostring(view.thread_id))
             local items = { {
                 id = 0,
-                data = { text = text, thread_data = data }
+                data = { text = text }
             } }
             if resp then
                 for idx, frame in ipairs(resp.stackFrames) do
@@ -138,18 +160,6 @@ function StackTrace:update_data(data, thread_id, thread_name)
             end
             self:set_items(items)
         end)
-end
-
-function StackTrace:clear_content()
-    self:set_items({})
-end
-
-function StackTrace:_greyout_content()
-    local items = self:get_items()
-    for _, item in ipairs(items) do
-        item.data.greyout = true
-    end
-    self:refresh_content()
 end
 
 return StackTrace

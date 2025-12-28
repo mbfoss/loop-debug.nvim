@@ -4,6 +4,7 @@ local strtools     = require('loop.tools.strtools')
 local watchexpr    = require('loop-debug.watchexpr')
 local floatwin     = require('loop-debug.tools.floatwin')
 local daptools     = require('loop-debug.dap.daptools')
+local debugevents  = require('loop-debug.debugevents')
 
 ---@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
 
@@ -37,11 +38,11 @@ local function _preview_string(str, max_len)
     return preview, true
 end
 
----@param is_watch boolean
+---@param watch_root boolean
 ---@param sess_id? number
 ---@return string
-local function _get_root_id(is_watch, sess_id)
-    return is_watch and "w" or tostring(sess_id)
+local function _get_root_id(watch_root, sess_id)
+    return watch_root and "w" or tostring(sess_id)
 end
 
 local function _make_node_id(parent, id)
@@ -127,6 +128,81 @@ local function _open_value_floatwin(id, data)
     floatwin.open_inspect_win(title, daptools.format_variable(value, hint))
 end
 
+function Variables:init()
+    ItemTreeComp.init(self, {
+        formatter = _variable_node_formatter,
+        render_delay_ms = 300,
+    })
+
+    ---@type number
+    self._query_context = 0
+
+    ---@type loopdebug.comp.Vars.DataSource|nil
+    self._current_data_source = nil
+
+    ---@type table<any,boolean> -- id --> expanded
+    self._layout_cache = {}
+    self:add_tracker({
+        on_toggle = function(id, data, expanded)
+            self._layout_cache[id] = expanded
+        end,
+        on_open = function(id, data)
+            _open_value_floatwin(id, data)
+        end
+    })
+
+    self:_upsert_watch_root() -- ensure this exists at the top
+    self:_load_watch_expressions(self._query_context)
+
+    ---@type number?
+    self._events_tracker_id = debugevents.add_tracker({
+        on_debug_start = function()
+        end,
+        on_debug_end = function()
+        end,        
+        on_session_added = function(id, info)
+            self:_load_watch_expressions(self._query_context)
+        end,
+        on_session_removed = function(id)
+        end,
+        on_view_udpate =function (view)
+            self._query_context = self._query_context + 1
+            self:_update_data(self._query_context, view)
+        end
+    })
+end
+
+function Variables:dispose()
+    ItemTreeComp.dispose(self)
+    if self._events_tracker_id then
+        debugevents.remove_tracker(self._events_tracker_id)
+        self._events_tracker_id = nil
+    end
+end
+
+---@param ctx number
+---@return boolean
+function Variables:is_current_context(ctx)
+    return ctx == self._query_context
+end
+
+function Variables:_greyout_content()
+    local items = self:get_items()
+    for _, item in ipairs(items) do
+        item.data.greyout = true
+    end
+    self:refresh_content()
+end
+
+---@param ctx number
+---@param view loopdebug.events.CurrentViewUpdate
+function Variables:_update_data(ctx, view)
+    self:_greyout_content()
+    self:_load_watch_expressions(ctx)
+    self:_load_session_vars(ctx)
+end
+
+
 ---@param context number
 ---@param data_providers loopdebug.session.DataProviders
 ---@param ref number
@@ -135,7 +211,7 @@ end
 function Variables:_load_variables(context, data_providers, ref, parent_id, callback)
     data_providers.variables_provider({ variablesReference = ref },
         function(_, vars_data)
-            if context ~= self._query_context then return end
+            if not self:is_current_context(context) then return end
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
@@ -217,32 +293,6 @@ function Variables:_load_scopes(context, parent_id, scopes, data_providers, scop
         table.insert(scope_items, scope_item)
     end
     scopes_cb(scope_items)
-end
-
-function Variables:init()
-    ItemTreeComp.init(self, {
-        formatter = _variable_node_formatter,
-        render_delay_ms = 300,
-    })
-
-    ---@type number
-    self._query_context = 0
-
-    ---@type loopdebug.comp.Vars.DataSource|nil
-    self._current_data_source = nil
-
-    ---@type table<any,boolean> -- id --> expanded
-    self._layout_cache = {}
-    self:add_tracker({
-        on_toggle = function(id, data, expanded)
-            self._layout_cache[id] = expanded
-        end,
-        on_open = function(id, data)
-            _open_value_floatwin(id, data)
-        end
-    })
-
-    self:_load_watch_expressions(0)
 end
 
 ---@param comp loop.CompBufferController
@@ -359,7 +409,7 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
         frameId = data_source.frame.id,
         context = 'watch',
     }, function(err, data)
-        if context ~= self._query_context then return end
+        if not self:is_current_context(context) then return end
         if err or not data then
             var_item.data.value = "not available"
             var_item.data.is_na = true
@@ -379,25 +429,6 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
         end
         self:upsert_item(var_item)
     end)
-end
-
----@param sess_id number?
----@param sess_name string?
----@param data_providers loopdebug.session.DataProviders?
----@param frame loopdebug.proto.StackFrame?
-function Variables:update_data(sess_id, sess_name, data_providers, frame)
-    sdfasdfasfd
-    self._query_context = self._query_context + 1
-    self._current_data_source = {
-        sess_id = sess_id,
-        sess_name = sess_name,
-        data_providers = data_providers,
-        frame = frame,
-    }
-    local ctx = self._query_context
-    self:_upsert_watch_root() -- ensure this exists at the top
-    self:_load_watch_expressions(ctx)
-    self:_load_session_vars(ctx)
 end
 
 ---@param context number
@@ -420,7 +451,7 @@ function Variables:_load_session_vars(context)
     }
     root_item.children_callback = function(cb)
         data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
-            if context ~= self._query_context then return end
+            if not self:is_current_context(context) then return end
             if scopes_data and scopes_data.scopes then
                 self:_load_scopes(context, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
             else
@@ -434,23 +465,6 @@ function Variables:_load_session_vars(context)
         end)
     end
     self:upsert_item(root_item)
-end
-
----@param sess_id any
-function Variables:_greyout_content(sess_id)
-    do
-        local items = self:get_item_and_children(_get_root_id(true))
-        for _, item in ipairs(items) do
-            item.data.greyout = true
-        end
-    end
-    do
-        local items = self:get_item_and_children(_get_root_id(false, sess_id))
-        for _, item in ipairs(items) do
-            item.data.greyout = true
-        end
-    end
-    self:refresh_content()
 end
 
 return Variables

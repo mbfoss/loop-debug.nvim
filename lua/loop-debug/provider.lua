@@ -1,24 +1,17 @@
 local run = require('loop-debug.run')
-local dapbreakpoints = require('loop-debug.dap.breakpoints')
-local watchexpr = require('loop-debug.watchexpr')
-local debugui = require('loop-debug.ui')
+local persistence = require('loop-debug.persistence')
 
 ---@type loop.TaskProvider
 local task_provider =
 {
     get_state = function()
-        local state = {}
-        state.breakpoints = dapbreakpoints.get_breakpoints()
-        state.watchexpr = watchexpr.get()
-        state.uilayout = debugui.get_layout_config()
-        return state
+        return persistence.get_data()
     end,
-    on_workspace_loaded = function(ws_dir, state)
-        if state.breakpoints then
-            dapbreakpoints.set_breakpoints(state.breakpoints)
-            watchexpr.set(state.watchexpr or {})
-            debugui.set_layout_config(state.uilayout)
-        end
+    on_workspace_open = function(ws_dir, state)
+        persistence.on_workspace_open(ws_dir, state)
+    end,
+    on_workspace_closed = function(ws_dir)
+        persistence.on_workspace_close()
     end,
     get_task_schema = function()
         local schema = require('loop-debug.schema')

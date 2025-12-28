@@ -1,25 +1,24 @@
-local current_config = require('loop-debug.config').current
-local signsmgr       = require('loop-debug.tools.signsmgr')
-local breakpoints    = require('loop-debug.breakpoints')
-local selector       = require("loop.tools.selector")
-local wsinfo         = require("loop.wsinfo")
-local uitools        = require("loop.tools.uitools")
+local config        = require('loop-debug.config')
+local signsmgr      = require('loop-debug.tools.signsmgr')
+local breakpoints   = require('loop-debug.breakpoints')
+local selector      = require("loop.tools.selector")
+local wsinfo        = require("loop.wsinfo")
+local uitools       = require("loop.tools.uitools")
 
-local M              = {}
+local M             = {}
 
-local _init_done     = false
-local _init_err_msg  = "init() not called"
+local _init_done    = false
+local _init_err_msg = "init() not called"
 
-local _sign_group    = "breakpoints"
+local _sign_group   = "breakpoints"
 
-local _sign_names    = {
-    active_breakpoint               = "active_breakpoint",
-    inactive_breakpoint             = "inactive_breakpoint",
-    logpoint                        = "logpoint",
-    logpoint_inactive               = "logpoint_inactive",
-    conditional_breakpoint          = "conditional_breakpoint",
-    conditional_breakpoint_inactive = "conditional_breakpoint_inactive",
-    rejected_breakpoint             = "rejected_breakpoint",
+local _sign_names   = {
+    active_breakpoint        = "active_breakpoint",
+    inactive_breakpoint      = "inactive_breakpoint",
+    logpoint                 = "logpoint",
+    logpoint_inactive        = "logpoint_inactive",
+    cond_breakpoint          = "cond_breakpoint",
+    cond_breakpoint_inactive = "cond_breakpoint_inactive",
 }
 
 
@@ -39,7 +38,7 @@ local function _get_breakpoint_sign(bp, verified)
     if bp.logMessage then
         sign = verified and _sign_names.logpoint or _sign_names.logpoint_inactive
     elseif bp.condition or bp.hitCondition then
-        sign = verified and _sign_names.conditional_breakpoint or _sign_names.conditional_breakpoint_inactive
+        sign = verified and _sign_names.cond_breakpoint or _sign_names.cond_breakpoint_inactive
     else
         sign = verified and _sign_names.active_breakpoint or _sign_names.inactive_breakpoint
     end
@@ -135,60 +134,6 @@ function _start(task_name)
     return tracker
 end
 
----@param bp loopdebug.SourceBreakpoint
----@param verified boolean
-local function _format_breakpoint(bp, verified)
-    local symbol = verified and "●" or "○"
-    if bp.logMessage and bp.logMessage ~= "" then
-        symbol = "▶" -- logpoint
-    end
-    if bp.condition and bp.condition ~= "" then
-        symbol = "◆" -- conditional
-    end
-    if bp.hitCondition and bp.hitCondition ~= "" then
-        symbol = "▲" -- hit-condition
-    end
-    local file = bp.file
-    local wsdir = wsinfo.get_ws_dir()
-    if wsdir then
-        file = vim.fs.relpath(wsdir, file) or file
-    end
-    local parts = { symbol }
-    table.insert(parts, " ")
-    table.insert(parts, file)
-    table.insert(parts, ":")
-    table.insert(parts, tostring(bp.line))
-    -- 3. Optional qualifiers
-    if bp.condition and bp.condition ~= "" then
-        table.insert(parts, " | if " .. bp.condition)
-    end
-    if bp.hitCondition and bp.hitCondition ~= "" then
-        table.insert(parts, " | hits=" .. bp.hitCondition)
-    end
-    if bp.logMessage and bp.logMessage ~= "" then
-        table.insert(parts, " | log: " .. bp.logMessage:gsub("\n", " "))
-    end
-    return table.concat(parts, '')
-end
-
-function _select_breakpoint()
-    local choices = {}
-    for _, data in pairs(_breakpoints_data) do
-        local verified = _get_breakpoint_state(data)
-        local item = {
-            label = _format_breakpoint(data.breakpoint, verified),
-            data = data.breakpoint,
-        }
-        table.insert(choices, item)
-    end
-    selector.select("Breakpoints", choices, nil, function(bp)
-        ---@cast bp loopdebug.SourceBreakpoint
-        if bp and bp.file then
-            uitools.smart_open_file(bp.file, bp.line, bp.column)
-        end
-    end)
-end
-
 local function _enable_breakpoint_sync_on_save()
     local group = vim.api.nvim_create_augroup(
         "LoopBreakpointSyncOnSave",
@@ -238,16 +183,20 @@ local function _enable_breakpoint_sync_on_save()
 end
 
 function M.init()
-    assert(not _init_done, "init already done")
+    if _init_done then return end
     _init_done = true
+    assert(config.current)
 
-    signsmgr.define_sign_group(_sign_group, current_config and current_config.sign_priority["breakpoints"] or 12)
-    signsmgr.define_sign(_sign_group, _sign_names.active_breakpoint, "●", "Debug")
-    signsmgr.define_sign(_sign_group, _sign_names.inactive_breakpoint, "○", "Debug")
-    signsmgr.define_sign(_sign_group, _sign_names.logpoint, "◆", "Debug")
-    signsmgr.define_sign(_sign_group, _sign_names.logpoint_inactive, "◇", "Debug")
-    signsmgr.define_sign(_sign_group, _sign_names.conditional_breakpoint, "■", "Debug")
-    signsmgr.define_sign(_sign_group, _sign_names.conditional_breakpoint_inactive, "□", "Debug")
+    local highlight = "LoopDebugBreakpoint"
+
+    vim.api.nvim_set_hl(0, highlight, { link = "Debug" })
+
+    local symbols = config.current.symbols
+
+    signsmgr.define_sign_group(_sign_group, config.current.sign_priority.breakpoints or 12)
+    for name, full_name in pairs(_sign_names) do
+        signsmgr.define_sign(_sign_group, full_name, symbols[name], highlight)
+    end
 
     _enable_breakpoint_sync_on_save()
 

@@ -24,7 +24,7 @@ local _defined_signs = {} -- group -> info
 
 ---@type table<string, loop.signs.GroupData> -- group -> data
 local _signs         = {}
-local _id_prefix     = "loopplugin_"
+local _id_prefix     = "loopdebug_"
 
 local _init_done     = false
 
@@ -82,6 +82,7 @@ end
 ---@param group string
 ---@param priority number
 function M.define_sign_group(group, priority)
+    assert(group and priority)
     assert(not _defined_signs[group])
     _defined_signs[group] = {
         sign_names = {},
@@ -94,6 +95,7 @@ end
 ---@param text string
 ---@param texthl string
 function M.define_sign(group, name, text, texthl)
+    assert(group and name and text and texthl)
     local defined_group = _defined_signs[group]
     assert(defined_group, "sign group not defined")
     assert(not defined_group.sign_names[name], "sign already in group")
@@ -160,7 +162,7 @@ function M.place_file_sign(id, file, line, group, name)
 
     name_table[id] = sign
 
-    if bufnr >= 0 then
+    if bufnr > 0 then
         _place_sign(bufnr, sign)
     end
 end
@@ -187,7 +189,7 @@ function M.remove_file_sign(id, group)
     for _, signs in pairs(file_table) do
         local sign = signs[id]
         if sign then
-            if bufnr >= 0 then
+            if bufnr > 0 then
                 _unplace_sign(bufnr, sign)
             end
             signs[id] = nil
@@ -221,7 +223,7 @@ function M.remove_file_signs(file, group)
     end
 
     local bufnr = _get_loaded_bufnr(file)
-    if bufnr >= 0 then
+    if bufnr > 0 then
         _remove_buf_signs(bufnr, group)
     end
 end
@@ -236,7 +238,7 @@ function M.remove_signs(group)
 
     for file in pairs(group_table.byfile) do
         local bufnr = _get_loaded_bufnr(file)
-        if bufnr >= 0 then
+        if bufnr > 0 then
             _remove_buf_signs(bufnr, group)
         end
     end
@@ -249,7 +251,7 @@ function M.clear_all()
     for group, group_table in pairs(_signs) do
         for file in pairs(group_table.byfile) do
             local bufnr = _get_loaded_bufnr(file)
-            if bufnr >= 0 then
+            if bufnr > 0 then
                 _remove_buf_signs(bufnr, group)
             end
         end

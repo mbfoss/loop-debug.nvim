@@ -253,6 +253,60 @@ function M.for_each(handler)
     end
 end
 
+---@param bp loopdebug.SourceBreakpoint
+---@param verified boolean
+local function _format_breakpoint(bp, verified)
+    local symbol = verified and "●" or "○"
+    if bp.logMessage and bp.logMessage ~= "" then
+        symbol = "▶" -- logpoint
+    end
+    if bp.condition and bp.condition ~= "" then
+        symbol = "◆" -- conditional
+    end
+    if bp.hitCondition and bp.hitCondition ~= "" then
+        symbol = "▲" -- hit-condition
+    end
+    local file = bp.file
+    local wsdir = wsinfo.get_ws_dir()
+    if wsdir then
+        file = vim.fs.relpath(wsdir, file) or file
+    end
+    local parts = { symbol }
+    table.insert(parts, " ")
+    table.insert(parts, file)
+    table.insert(parts, ":")
+    table.insert(parts, tostring(bp.line))
+    -- 3. Optional qualifiers
+    if bp.condition and bp.condition ~= "" then
+        table.insert(parts, " | if " .. bp.condition)
+    end
+    if bp.hitCondition and bp.hitCondition ~= "" then
+        table.insert(parts, " | hits=" .. bp.hitCondition)
+    end
+    if bp.logMessage and bp.logMessage ~= "" then
+        table.insert(parts, " | log: " .. bp.logMessage:gsub("\n", " "))
+    end
+    return table.concat(parts, '')
+end
+
+function _select_breakpoint()
+    local choices = {}
+    for _, data in pairs(_breakpoints_data) do
+        local verified = _get_breakpoint_state(data)
+        local item = {
+            label = _format_breakpoint(data.breakpoint, verified),
+            data = data.breakpoint,
+        }
+        table.insert(choices, item)
+    end
+    selector.select("Breakpoints", choices, nil, function(bp)
+        ---@cast bp loopdebug.SourceBreakpoint
+        if bp and bp.file then
+            uitools.smart_open_file(bp.file, bp.line, bp.column)
+        end
+    end)
+end
+
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
     local ws_dir = wsinfo.get_ws_dir()

@@ -1,23 +1,79 @@
-local M                   = {}
+local M              = {}
 
-local manager             = require('loop-debug.manager')
-local CompBuffer          = require('loop.buf.CompBuffer')
-local VariablesComp       = require('loop-debug.comp.Variables')
-local StackTraceComp      = require('loop-debug.comp.StackTrace')
+local persistence = require('loop-debug.persistence')
+local CompBuffer     = require('loop.buf.CompBuffer')
+local VariablesComp  = require('loop-debug.comp.Variables')
+local StackTraceComp = require('loop-debug.comp.StackTrace')
 
-local _ui_auto_group      = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
+local _ui_auto_group = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
 
-local _manager_tracker_id = nil
+---@type loop.comp.CompBuffer?
+local _vars_compbuffer
+
+---@type loop.comp.CompBuffer?
+local _stack_compbuffer
+
+---@type loopdebug.comp.Variables?
+local _variables_comp
+
+---@type loopdebug.comp.StackTrace?
+local _stack_comp
+
+local function _destroy_components()
+    if _vars_compbuffer then
+        _vars_compbuffer:destroy()
+        _vars_compbuffer = nil
+    end
+
+    if _stack_compbuffer then
+        _stack_compbuffer:destroy()
+        _stack_compbuffer = nil
+    end
+
+    if _variables_comp then
+        _variables_comp:dispose()
+        _variables_comp = nil
+    end
+    if _stack_comp then
+        _stack_comp:dispose()
+        _stack_comp = nil
+    end
+end
+
+---@param vars_winid number
+---@param stack_winid number
+local function _create_components(vars_winid, stack_winid)
+    _destroy_components()
+    assert(not _vars_compbuffer and not _stack_compbuffer)
+    assert(not _variables_comp and not _stack_comp)
+
+    _vars_compbuffer = CompBuffer:new("debugvars", "Variables")
+    _stack_compbuffer = CompBuffer:new("callstack", "Call Stack")
+
+    vim.wo[vars_winid].winfixbuf = false
+    vim.api.nvim_win_set_buf(vars_winid, (_vars_compbuffer:get_or_create_buf()))
+    vim.wo[vars_winid].winfixbuf = true
+
+    vim.wo[stack_winid].winfixbuf = false
+    vim.api.nvim_win_set_buf(stack_winid, (_stack_compbuffer:get_or_create_buf()))
+    vim.wo[stack_winid].winfixbuf = true
+
+    _variables_comp = VariablesComp:new("Variables")
+    _stacktrace_comp = StackTraceComp:new("Call Stack")
+
+    _variables_comp:link_to_buffer(_vars_compbuffer:make_controller())
+    _stacktrace_comp:link_to_buffer(_stack_compbuffer:make_controller())
+end
 
 -- Configuration and State Storage
-_layout_config            = {
-    width = math.floor(vim.o.columns / 4),
-    top_height = nil, -- If nil, split is equal (50/50)
+_layout_config   = {
+    width_ratio = 0.20,
+    top_ratio = 0.5,
 }
 
 -- Unique keys for window variables
-local KEY_MARKER          = "loopdebugplugin_debugpanel"
-local KEY_TYPE            = "loopdebugplugin_panel_type" -- "TOP" or "BOTTOM"
+local KEY_MARKER = "loopdebugplugin_debugpanel"
+local KEY_TYPE   = "loopdebugplugin_panel_type" -- "TOP" or "BOTTOM"
 
 local function is_managed_window(win_id)
     if not vim.api.nvim_win_is_valid(win_id) then return false end
@@ -41,21 +97,22 @@ end
 
 function M.set_layout_config(cfg)
     _layout_config = cfg or {}
-    _layout_config.width = _layout_config.width or math.floor(vim.o.columns / 4)
+    _layout_config.width_ratio = _layout_config.width_ratio or 0.20
 end
 
 function M.toggle()
     local managed = get_managed_windows()
-
     if #managed > 0 then
         vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
-        if _manager_tracker_id then
-            manager.remove_tracker(_manager_tracker_id)
-            _manager_tracker_id = nil
-        end
         for _, win in ipairs(managed) do
             vim.api.nvim_win_close(win, true)
         end
+        _destroy_components()
+        return
+    end
+
+    if not persistence.is_ws_open() then
+        vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
         return
     end
 
@@ -64,34 +121,22 @@ function M.toggle()
     -- 1. Create the Vertical container
     vim.cmd("topleft vsplit")
     local top_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_width(top_win, _layout_config.width)
+    vim.api.nvim_win_set_width(top_win, math.floor(_layout_config.width_ratio * vim.o.columns))
 
     -- 2. Create the Horizontal split
     vim.cmd("below split")
     local bottom_win = vim.api.nvim_get_current_win()
 
     -- 3. Restore Height with validation
-    if _layout_config.top_height then
-        -- Ensure we don't try to set a height taller than the screen - 2 (for status/cmd line)
-        local safe_height = math.min(_layout_config.top_height, vim.o.lines - 3)
-        if safe_height then
-            vim.api.nvim_win_set_height(top_win, safe_height)
-        end
+    if _layout_config.top_ratio then
+        local height = math.floor(vim.o.lines * _layout_config.top_ratio)
+        vim.api.nvim_win_set_height(top_win, height)
     end
 
     local config_map = {
         [top_win] = "TOP",
         [bottom_win] = "BOTTOM"
     }
-
-    local vars_buffer = CompBuffer:new("debugvars", "Variables")
-    local stack_buffer = CompBuffer:new("callstack", "Call Stack")
-
-    local vars_buf = vars_buffer:get_or_create_buf()
-    local stack_buf = stack_buffer:get_or_create_buf()
-    
-    vim.api.nvim_win_set_buf(top_win, vars_buf)
-    vim.api.nvim_win_set_buf(bottom_win, stack_buf)
 
     for win, type_name in pairs(config_map) do
         -- Visuals
@@ -126,30 +171,15 @@ function M.toggle()
                         local h = vim.api.nvim_win_get_height(winid)
                         local is_width_valid = w < math.floor(total_cols * 0.6)
                         local is_height_valid = h < math.floor(total_lines * 0.9)
-                        if is_width_valid then _layout_config.width = w end
-                        if is_height_valid then _layout_config.top_height = h end
+                        if is_width_valid then _layout_config.width_ratio = (w / vim.o.columns) end
+                        if is_height_valid then _layout_config.top_ratio = (h / vim.o.lines) end
                     end
                 end
             end
         end,
     })
 
-    local variables_comp = VariablesComp:new("Variables")
-    local stacktrace_comp = StackTraceComp:new("Call Stack")
-
-    if _manager_tracker_id then
-        manager.remove_tracker(_manager_tracker_id)
-        _manager_tracker_id = nil
-    end
-    _manager_tracker_id = manager.add_tracker({
-        on_job_update = function(update)
-            variables_comp:update_data(update.session_id, update.sess_name, update.data_providers, update.cur_frame)
-            stacktrace_comp:update_data(update.data_providers, update.cur_thread_id, update.cur_thread_name)
-        end
-    })
-
-    variables_comp:link_to_buffer(vars_buffer:make_controller())
-    stacktrace_comp:link_to_buffer(stack_buffer:make_controller())
+    _create_components(top_win, bottom_win)
 end
 
 return M

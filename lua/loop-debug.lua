@@ -20,10 +20,16 @@ local DEFAULT_CONFIG = {
         currentframe = 13,
     },
     symbols = {
-        running = "▶",
-        paused  = "⏸",
-        success = "✓",
-        failure = "✗",
+        running                  = "▶",
+        paused                   = "⏸",
+        success                  = "✓",
+        failure                  = "✗",
+        active_breakpoint        = "●",
+        inactive_breakpoint      = "○",
+        logpoint                 = "◆",
+        logpoint_inactive        = "◇",
+        cond_breakpoint          = "■",
+        cond_breakpoint_inactive = "□",
     },
     debuggers = require("loop-debug.debuggers")
 }
@@ -66,8 +72,9 @@ function M.init()
         config.current = DEFAULT_CONFIG
     end
 
-    require('loop-debug.signs').init()
-    require('loop-debug.breakpoints').init()
+    require('loop-debug.tools.signsmgr').init()
+    require('loop-debug.breakpoint_signs').init()
+    require('loop-debug.curframe_sign').init()
 end
 
 -----------------------------------------------------------
