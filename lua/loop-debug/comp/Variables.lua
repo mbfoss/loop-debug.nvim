@@ -96,7 +96,7 @@ end
 
 local function _make_node_id(parent, id)
     assert(parent ~= nil and id ~= nil)
-    return parent .. strtools.special_marker1() .. id
+    return parent .. strtools.special_marker1() .. tostring(id)
 end
 
 local _var_kind_to_hl_group = {
@@ -193,7 +193,7 @@ function Variables:init()
     self._layout_cache = {}
     self:add_tracker({
         on_toggle = function(id, data, expanded)
-            self._layout_cache[id] = expanded
+            self._layout_cache[data.path] = expanded
         end,
         on_open = function(id, data)
             _open_value_floatwin(id, data)
@@ -265,21 +265,24 @@ end
 ---@param data_providers loopdebug.session.DataProviders
 ---@param ref number
 ---@param parent_id string
+---@param parent_path string
 ---@param callback fun(items:loopdebug.comp.Variables.Item[])
-function Variables:_load_variables(context, data_providers, ref, parent_id, callback)
+function Variables:_load_variables(context, data_providers, ref, parent_id, parent_path, callback)
     data_providers.variables_provider({ variablesReference = ref },
         function(_, vars_data)
             if not self:is_current_context(context) then return end
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
-                    local item_id = _make_node_id(parent_id, var.name)
+                    local item_id = _make_node_id(parent_id, var_idx)
+                    local path = parent_path .. '/' .. var.name
                     ---@type loopdebug.comp.Variables.Item
                     local var_item = {
                         id = item_id,
                         parent_id = parent_id,
-                        expanded = self._layout_cache[item_id],
+                        expanded = self._layout_cache[path],
                         data = {
+                            path = path,
                             name = var.name,
                             value = var.value,
                             presentationHint = var.presentationHint
@@ -290,7 +293,7 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, call
                             if var_item.data.greyout then
                                 cb({})
                             else
-                                self:_load_variables(context, data_providers, var.variablesReference, item_id, cb)
+                                self:_load_variables(context, data_providers, var.variablesReference, item_id, path, cb)
                             end
                         end
                     end
@@ -302,6 +305,7 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, call
                     id = {}, -- a unique id
                     parent_id = parent_id,
                     data = {
+                        path = '',
                         is_na = true
                     },
                 }
@@ -313,16 +317,18 @@ end
 
 ---@param context number
 ---@param parent_id string
+---@param parent_path string
 ---@param scopes loopdebug.proto.Scope[]
 ---@param data_providers loopdebug.session.DataProviders
 ---@param scopes_cb loop.comp.ItemTree.ChildrenCallback
-function Variables:_load_scopes(context, parent_id, scopes, data_providers, scopes_cb)
+function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_providers, scopes_cb)
     ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}
     for scope_idx, scope in ipairs(scopes) do
-        local item_id = _make_node_id(parent_id, scope.name)
+        local item_id = _make_node_id(parent_id, scope_idx)
+        local path = parent_path .. '/' .. scope.name
         local prefix = scope.expensive and "⏱ " or ""
-        local expanded = self._layout_cache[item_id]
+        local expanded = self._layout_cache[path]
         if expanded == nil then
             if scope.expensive
                 or scope.presentationHint == "globals"
@@ -339,13 +345,13 @@ function Variables:_load_scopes(context, parent_id, scopes, data_providers, scop
             id = item_id,
             parent_id = parent_id,
             expanded = expanded,
-            data = { scopelabel = prefix .. scope.name }
+            data = { path = path, scopelabel = prefix .. scope.name }
         }
         scope_item.children_callback = function(cb)
             if scope_item.data.greyout then
                 cb({})
             else
-                self:_load_variables(context, data_providers, scope.variablesReference, item_id, cb)
+                self:_load_variables(context, data_providers, scope.variablesReference, item_id, path, cb)
             end
         end
         table.insert(scope_items, scope_item)
@@ -425,7 +431,7 @@ function Variables:_upsert_watch_root()
         local root_item = {
             id = id,
             expanded = true,
-            data = { scopelabel = "Watch" }
+            data = { path = id, scopelabel = "Watch" }
         }
         self:upsert_item(root_item)
     end
@@ -453,7 +459,7 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
         id = item_id,
         parent_id = parent_id,
         expanded = self._layout_cache[expr],
-        data = { is_expr = true, name = expr }
+        data = { path = item_id, is_expr = true, name = expr }
     }
 
     local data_source = self._current_data_source
@@ -482,7 +488,7 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
                         cb({})
                     else
                         self:_load_variables(context, data_source.data_providers, data.variablesReference, var_item.id,
-                            cb)
+                            var_item.id, cb)
                     end
                 end
             end
@@ -525,13 +531,13 @@ function Variables:_load_session_vars(context)
     local root_item = {
         id = root_id,
         expanded = true,
-        data = { scopelabel = "Session: " .. data_source.session_name }
+        data = { path = root_id,  scopelabel = "Session: " .. data_source.session_name }
     }
     ---@return loop.comp.ItemTree.Item
     local function make_na_item()
         return {
             id = {}, -- a unique id
-            data = { is_na = true },
+            data = { path = '', is_na = true },
         }
     end
     root_item.children_callback = function(cb)
@@ -544,7 +550,7 @@ function Variables:_load_session_vars(context)
                 return
             end
             if scopes_data and scopes_data.scopes then
-                self:_load_scopes(context, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
+                self:_load_scopes(context, root_item.id, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
             else
                 cb({ make_na_item() })
             end
