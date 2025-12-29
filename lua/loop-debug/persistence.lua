@@ -11,9 +11,9 @@ local Trackers  = require("loop.tools.Trackers")
 local _current_data
 
 ---@class loopdebug.persistence.Tracker
----@field on_ws_open fun()
----@field on_ws_closed fun()
----@field on_ws_will_save fun()
+---@field on_ws_open fun()?
+---@field on_ws_closed fun()?
+---@field on_ws_will_save fun()?
 
 ---@type loop.tools.Trackers<loopdebug.persistence.Tracker>
 local _trackers = Trackers:new()

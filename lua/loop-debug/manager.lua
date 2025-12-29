@@ -1,12 +1,13 @@
-local SessionList   = require('loop-debug.comp.SessionList')
-local notifications = require('loop.notifications')
-local selector      = require('loop.tools.selector')
-local breakpoints   = require('loop-debug.breakpoints')
-local floatwin      = require('loop-debug.tools.floatwin')
-local daptools      = require('loop-debug.dap.daptools')
-local debugevents   = require('loop-debug.debugevents')
+local SessionList        = require('loop-debug.comp.SessionList')
+local notifications      = require('loop.notifications')
+local selector           = require('loop.tools.selector')
+local breakpoints        = require('loop-debug.breakpoints')
+local breakpointsmonitor = require('loop-debug.breakpointsmonitor')
+local floatwin           = require('loop-debug.tools.floatwin')
+local daptools           = require('loop-debug.dap.daptools')
+local debugevents        = require('loop-debug.debugevents')
 
-local M             = {}
+local M                  = {}
 
 ---@class loopdebug.mgr.Context
 ---@field session_ctx number
@@ -44,7 +45,7 @@ local M             = {}
 ---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
 
-local _page_groups  = {
+local _page_groups       = {
     task = "task",
     variables = "vars",
     watch = "watch",
@@ -227,19 +228,17 @@ end
 local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
     _increment_context(jobdata, "session")
 
-    _switch_to_thread(jobdata, jobdata.current_session_id, nil, false)
-
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         _report_current_view(jobdata)
         return
     end
 
+    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
+    if not thread_id then return  end
+
     jobdata.current_session_id = sess_id
     _report_current_view(jobdata)
-
-    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
-    if not thread_id then return end
 
     if thread_pause_evt then
         if not thread_pause_evt.all_thread then
@@ -804,7 +803,11 @@ end
 ---@param arg1 string|nil
 function M.debug_command(command, arg1)
     if command == "breakpoint" then
-        breakpoints.breakpoints_command(arg1)
+        if arg1 == "list" then
+            breakpointsmonitor.select_breakpoint()
+        else
+            breakpoints.breakpoints_command(arg1)
+        end
         return
     end
     local jobdata = _current_job_data

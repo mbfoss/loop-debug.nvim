@@ -5,6 +5,8 @@ local CompBuffer      = require('loop.buf.CompBuffer')
 local VariablesComp   = require('loop-debug.comp.Variables')
 local StackTraceComp  = require('loop-debug.comp.StackTrace')
 
+local _init_done      = false
+
 local _ui_auto_group  = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
 
 ---@type loop.comp.CompBuffer?
@@ -107,21 +109,18 @@ local function get_managed_windows()
     return found
 end
 
-function M.toggle()
+function M.show()
     local managed = get_managed_windows()
     if #managed > 0 then
-        vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
-        for _, win in ipairs(managed) do
-            vim.api.nvim_win_close(win, true)
-        end
-        _destroy_components()
         return
     end
 
-    --if not persistence.is_ws_open() then
-    --    vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
-    --    return
-    --end
+    assert(_init_done)
+
+    if not persistence.is_ws_open() then
+        vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
+        return
+    end
 
     local layout = vim.tbl_deep_extend("force", _default_layout, persistence.get_config("layout") or {})
 
@@ -180,6 +179,34 @@ function M.toggle()
     })
 
     _create_components(top_win, bottom_win)
+end
+
+function M.hide()
+    local managed = get_managed_windows()
+    vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
+    for _, win in ipairs(managed) do
+        vim.api.nvim_win_close(win, true)
+    end
+    _destroy_components()
+end
+
+function M.toggle()
+    local managed = get_managed_windows()
+    if #managed > 0 then
+        M.hide()
+        return
+    end
+    M.show()
+end
+
+function M.init()
+    if _init_done then return end
+    _init_done = true
+    persistence.add_tracker({
+        on_ws_closed = function()
+            M.hide()
+        end
+    })
 end
 
 return M

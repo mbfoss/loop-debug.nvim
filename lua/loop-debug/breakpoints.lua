@@ -242,29 +242,6 @@ function M.for_each(handler)
     end
 end
 
---[[
-function _select_breakpoint()
-    local data = persistence.get_config("breakpoints")
-    if not data then return end
-    ---@cast data loopdebug.SourceBreakpoint[]
-    local choices = {}
-    for _, bp in pairs(data) do
-        local verified = _get_breakpoint_state(data)
-        local item = {
-            label = _format_breakpoint(data.breakpoint, verified),
-            data = data.breakpoint,
-        }
-        table.insert(choices, item)
-    end
-    selector.select("Breakpoints", choices, nil, function(bp)
-        ---@cast bp loopdebug.SourceBreakpoint
-        if bp and bp.file then
-            uitools.smart_open_file(bp.file, bp.line, bp.column)
-        end
-    end)
-end
-]] --
-
 ---@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
     local ws_dir = wsinfo.get_ws_dir()
@@ -306,9 +283,7 @@ function M.breakpoints_command(command)
                 M.clear_all_breakpoints()
             end
         end)
-    elseif command == "list" then
-        --_select_breakpoint()
-    else
+
         vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
     end
 end

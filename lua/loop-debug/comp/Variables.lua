@@ -41,17 +41,15 @@ end
 ---@param expr string
 ---@return boolean
 function _add_watch_expr(expr)
-    local data = persistence.get_config("watch")
-    if data then
-        ---@cast data string[]
-        for _, v in ipairs(data) do
-            if v == expr then return false end
-        end
-        table.insert(data, expr)
-        persistence.set_config("watch", data)
-        return true
+    if not persistence.is_ws_open() then return false end
+    local data = persistence.get_config("watch") or {}
+    ---@cast data string[]
+    for _, v in ipairs(data) do
+        if v == expr then return false end
     end
-    return false
+    table.insert(data, expr)
+    persistence.set_config("watch", data)
+    return true
 end
 
 ---@param old string
@@ -89,11 +87,11 @@ function _remove_watch_expr(expr)
     return false
 end
 
----@param watch_root boolean
+---@param type "no_ws"|"watch"|"sess"
 ---@param sess_id? number
 ---@return string
-local function _get_root_id(watch_root, sess_id)
-    return watch_root and "w" or tostring(sess_id)
+local function _get_root_id(type, sess_id)
+    return type ~= "sess" and type or tostring(sess_id)
 end
 
 local function _make_node_id(parent, id)
@@ -420,7 +418,8 @@ end
 
 ---@return any root_id
 function Variables:_upsert_watch_root()
-    local id = _get_root_id(true)
+    if not persistence.is_ws_open() then return end
+    local id = _get_root_id("watch")
     if not self:get_item(id) then
         ---@type loop.comp.ItemTree.Item
         local root_item = {
@@ -511,7 +510,7 @@ function Variables:_load_session_vars(context)
     local data_source = self._current_data_source
     if not data_source then return end
 
-    local root_id = _get_root_id(false, data_source.session_id)
+    local root_id = _get_root_id("sess", data_source.session_id)
 
     if not data_source.frame or not data_source.data_providers then
         local items = self:get_item_and_children(root_id)

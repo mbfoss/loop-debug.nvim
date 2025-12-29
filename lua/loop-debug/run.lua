@@ -40,6 +40,8 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
         return startup_callback(nil, err or "failed to start debug job")
     end
 
+    require('loop-debug.ui').show()
+
     -- Success!
     startup_callback(job, nil)
 end

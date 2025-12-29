@@ -32,15 +32,16 @@ local _breakpoints_data = {}
 ---@param bp loopdebug.SourceBreakpoint
 ---@param verified boolean
 local function _format_breakpoint(bp, verified)
+    local symbols = config.current.symbols
     local symbol = verified and "●" or "○"
     if bp.logMessage and bp.logMessage ~= "" then
-        symbol = "▶" -- logpoint
+        symbol = verified and symbols.logpoint or symbols.logpoint_inactive
     end
     if bp.condition and bp.condition ~= "" then
-        symbol = "◆" -- conditional
+        symbol = verified and symbols.cond_breakpoint or symbols.cond_breakpoint_inactive
     end
     if bp.hitCondition and bp.hitCondition ~= "" then
-        symbol = "▲" -- hit-condition
+        symbol = verified and symbols.cond_breakpoint or symbols.cond_breakpoint_inactive
     end
     local file = bp.file
     local wsdir = wsinfo.get_ws_dir()
@@ -52,7 +53,7 @@ local function _format_breakpoint(bp, verified)
     table.insert(parts, file)
     table.insert(parts, ":")
     table.insert(parts, tostring(bp.line))
-    -- 3. Optional qualifiers
+
     if bp.condition and bp.condition ~= "" then
         table.insert(parts, " | if " .. bp.condition)
     end
@@ -216,6 +217,34 @@ local function _enable_breakpoint_sync_on_save()
             end
         end,
     })
+end
+function M.select_breakpoint()
+    local ws_dir = wsinfo.get_ws_dir()
+    if not ws_dir then
+        vim.notify('No active workspace')
+        return
+    end
+    local data = breakpoints.get_breakpoints()
+    if not data or #data == 0 then
+        vim.notify('No existing breakpoints')
+        return
+    end
+    ---@cast data loopdebug.SourceBreakpoint[]
+    local choices = {}
+    for _, bp in pairs(data) do
+        local verified = _get_breakpoint_state(data)
+        local item = {
+            label = _format_breakpoint(bp, verified),
+            data = bp,
+        }
+        table.insert(choices, item)
+    end
+    selector.select("Breakpoints", choices, nil, function(bp)
+        ---@cast bp loopdebug.SourceBreakpoint
+        if bp and bp.file then
+            uitools.smart_open_file(bp.file, bp.line, bp.column)
+        end
+    end)
 end
 
 function M.init()

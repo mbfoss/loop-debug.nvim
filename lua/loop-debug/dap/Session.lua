@@ -45,19 +45,6 @@ function Session:_create_data_providers()
 
     local na_msg = "not available"
 
-    ---@type loopdebug.session.BreakpointsCommand
-    local breakpoint_command = function(cmd, bp)
-        if cmd == "add" then
-            self:set_source_breakpoint(bp)
-        elseif cmd == "remove" then
-            self:remove_breakpoint(bp.id)
-        elseif cmd == "remove_all" then
-            self:remove_all_breakpoints()
-        else
-            assert(false)
-        end
-    end
-
     ---@type loopdebug.session.ThreadsProvider
     local threads_provider = function(callback)
         if not is_available() then
@@ -147,7 +134,6 @@ function Session:_create_data_providers()
 
     ---@type loopdebug.session.DataProviders
     return {
-        breakpoints_command = breakpoint_command,
         threads_provider = threads_provider,
         stack_provider = stack_provider,
         scopes_provider = scopes_provider,

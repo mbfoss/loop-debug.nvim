@@ -69,7 +69,6 @@ error('Cannot require a meta file')
 ---@class loopdebug.session.notify.StateData
 ---@field state "initializing"|"starting"|"running"|"disconnecting"|"ended"
 
----@alias loopdebug.session.BreakpointsCommand fun(cmd:"add"|"remove"|"remove_all",bp:loopdebug.SourceBreakpoint?)
 ---@alias loopdebug.session.ThreadsProvider fun(callback:fun(err:string|nil, data: loopdebug.proto.ThreadsResponse | nil))
 ---@alias loopdebug.session.StackProvider fun(args:loopdebug.proto.StackTraceArguments, callback:fun(err:string|nil, data: loopdebug.proto.StackTraceResponse | nil))
 ---@alias loopdebug.session.ScopesProvider fun(args:loopdebug.proto.ScopesArguments, callback:fun(err:string|nil, data: loopdebug.proto.ScopesResponse | nil))
@@ -78,7 +77,6 @@ error('Cannot require a meta file')
 ---@alias loopdebug.session.CompletionProvider fun(args:loopdebug.proto.CompletionsArguments, callback:fun(err:string|nil, data: loopdebug.proto.CompletionsResponse | nil))
 
 ---@class loopdebug.session.DataProviders
----@field breakpoints_command loopdebug.session.BreakpointsCommand
 ---@field threads_provider loopdebug.session.ThreadsProvider
 ---@field stack_provider loopdebug.session.StackProvider
 ---@field scopes_provider loopdebug.session.ScopesProvider
