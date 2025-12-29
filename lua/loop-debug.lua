@@ -21,7 +21,7 @@ local DEFAULT_CONFIG = {
     },
     symbols = {
         running                  = "▶",
-        paused                   = "⏸",
+        paused                   = "■",
         success                  = "✓",
         failure                  = "✗",
         active_breakpoint        = "●",

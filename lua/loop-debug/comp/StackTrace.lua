@@ -79,6 +79,7 @@ end
 function StackTrace:init()
     ItemListComp.init(self, {
         formatter = _item_formatter,
+        show_current_prefix = true,
     })
 
     ---@type number
@@ -144,6 +145,7 @@ function StackTrace:_update_data(view)
             levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
+            local cur_item_id = nil
             if context ~= self._query_context then return end
             local text = "Thread: " .. (view.thread_name or tostring(view.thread_id))
             local items = { {
@@ -155,9 +157,11 @@ function StackTrace:_update_data(view)
                     ---@type loop.comp.ItemList.Item
                     local item = { id = idx, data = { frame = frame } }
                     table.insert(items, item)
+                    if view.frame and frame.id == view.frame.id then cur_item_id = item.id end
                 end
             end
             self:set_items(items)
+            if cur_item_id then self:set_current_id(cur_item_id) end
         end)
 end
 

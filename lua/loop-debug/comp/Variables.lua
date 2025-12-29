@@ -94,9 +94,10 @@ local function _get_root_id(type, sess_id)
     return type ~= "sess" and type or tostring(sess_id)
 end
 
-local function _make_node_id(parent, id)
-    assert(parent ~= nil and id ~= nil)
-    return parent .. strtools.special_marker1() .. tostring(id)
+local _last_node_id = 0
+local function _make_node_id()
+    _last_node_id = _last_node_id + 1
+    return _last_node_id
 end
 
 local _var_kind_to_hl_group = {
@@ -274,7 +275,7 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, pare
             local children = {}
             if vars_data then
                 for var_idx, var in ipairs(vars_data.variables) do
-                    local item_id = _make_node_id(parent_id, var_idx)
+                    local item_id = _make_node_id()
                     local path = parent_path .. '/' .. var.name
                     ---@type loopdebug.comp.Variables.Item
                     local var_item = {
@@ -325,7 +326,7 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_pr
     ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}
     for scope_idx, scope in ipairs(scopes) do
-        local item_id = _make_node_id(parent_id, scope_idx)
+        local item_id = _make_node_id()
         local path = parent_path .. '/' .. scope.name
         local prefix = scope.expensive and "⏱ " or ""
         local expanded = self._layout_cache[path]

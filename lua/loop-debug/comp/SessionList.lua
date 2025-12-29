@@ -2,7 +2,6 @@ local class = require('loop.tools.class')
 local ItemList = require('loop.comp.ItemList')
 local config = require('loop-debug.config')
 local debugevents = require('loop-debug.debugevents')
-local Trackers = require("loop.tools.Trackers")
 
 ---@class loopdebug.comp.SessionListComp : loop.comp.ItemList
 ---@field new fun(self: loopdebug.comp.SessionListComp): loopdebug.comp.SessionListComp
@@ -29,8 +28,6 @@ function SessionListComp:init()
     self._sessions = {}
     ---@type boolean?
     self._job_result = nil
-    ---@type number?
-    self._current_sess_id = nil
 
     ---@type loop.TrackerRef?
     self._events_tracker_ref = debugevents.add_tracker({
@@ -57,7 +54,7 @@ function SessionListComp:init()
             self:_refresh()
         end,
         on_view_udpate = function(view)
-            self._current_sess_id = view.session_id
+            self:set_current_id(view.session_id)
         end
     })
 end
@@ -130,7 +127,6 @@ function SessionListComp:_refresh()
     end
 
     self:set_items(list_items)
-    self:set_current_item_by_id(self._current_sess_id)
     if self._page then
         self._page.set_ui_flags(uiflags)
     end
