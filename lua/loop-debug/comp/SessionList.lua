@@ -118,7 +118,7 @@ function SessionListComp:_refresh()
             id = sess_id,
             ---@class loopdebug.mgr.TaskPageItemData
             data = {
-                label = tostring(sess_id) .. ' ' .. tostring(info.name) .. ' - ' .. info.state,
+                label = tostring(info.name) .. ' - ' .. info.state,
                 nb_paused_threads = nb_paused_threads,
             }
         }
@@ -135,20 +135,3 @@ end
 return SessionListComp
 
 
---[[
-
-  _refresh_task_page(jobdata)
-
-
-
----@param jobdata loopdebug.mgr.DebugJobData
-local
-    sessionlist_comp:add_tracker({
-        on_selection = function(id, data)
-            if id then
-                _switch_to_session(jobdata, id)
-            end
-        end
-    })
-
-]]

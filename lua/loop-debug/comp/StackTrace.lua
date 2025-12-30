@@ -16,7 +16,7 @@ local function _item_formatter(item, highlights)
 
     local frame = item.data.frame
     if not frame then
-        table.insert(highlights, item.data.greyout and "NonText" or "Directory")
+        table.insert(highlights, { group = item.data.greyout and "NonText" or "Directory"})
         return item.data.text
     end
 

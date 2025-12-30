@@ -87,13 +87,6 @@ function _remove_watch_expr(expr)
     return false
 end
 
----@param type "no_ws"|"watch"|"sess"
----@param sess_id? number
----@return string
-local function _get_root_id(type, sess_id)
-    return type ~= "sess" and type or tostring(sess_id)
-end
-
 local _last_node_id = 0
 local function _make_node_id()
     _last_node_id = _last_node_id + 1
@@ -131,9 +124,11 @@ local function _variable_node_formatter(id, data, highlights)
         return "not available"
     end
 
+    local hl = data.greyout and "NonText" or nil
+
     if not data then return "" end
     if data.scopelabel then
-        table.insert(highlights, { group = "Directory" })
+        table.insert(highlights, { group = hl or "Directory" })
         return data.scopelabel
     end
 
@@ -143,13 +138,13 @@ local function _variable_node_formatter(id, data, highlights)
 
     value = daptools.format_variable(value, hint)
     local preview, is_different = _preview_string(value, vim.o.columns)
-    table.insert(highlights, { group = "@symbol", start_col = 0, end_col = #name })
+    table.insert(highlights, { group = hl or "@symbol", start_col = 0, end_col = #name })
     if data.is_na or data.greyout then
-        table.insert(highlights, { group = "NonText", start_col = #name })
+        table.insert(highlights, { group = hl or "NonText", start_col = #name })
     else
         local start_col = #name
         local end_col = start_col + 2
-        table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
+        table.insert(highlights, { group = hl or "NonText", start_col = start_col, end_col = end_col })
         start_col = end_col
         end_col = start_col + #preview
         local kind = hint and hint.kind or nil
@@ -157,7 +152,7 @@ local function _variable_node_formatter(id, data, highlights)
         if is_different then
             start_col = end_col
             end_col = start_col + 1
-            table.insert(highlights, { group = "NonText", start_col = start_col, end_col = end_col })
+            table.insert(highlights, { group = hl or "NonText", start_col = start_col, end_col = end_col })
         end
     end
     return name .. ': ' .. preview
@@ -208,7 +203,6 @@ function Variables:init()
         on_debug_end = function()
         end,
         on_session_added = function(id, info)
-            self:_load_watch_expressions(self._query_context)
         end,
         on_session_removed = function(id)
         end,
@@ -221,10 +215,9 @@ function Variables:init()
 
     self._persistence_tracker_ref = persistence.add_tracker({
         on_ws_open = function()
-            self:_load_watch_expressions(self._query_context)
+            self:_update_data(self._query_context)
         end,
         on_ws_closed = function()
-            self:clear_items()
         end,
         on_ws_will_save = function()
         end
@@ -265,7 +258,7 @@ end
 ---@param context number
 ---@param data_providers loopdebug.session.DataProviders
 ---@param ref number
----@param parent_id string
+---@param parent_id any
 ---@param parent_path string
 ---@param callback fun(items:loopdebug.comp.Variables.Item[])
 function Variables:_load_variables(context, data_providers, ref, parent_id, parent_path, callback)
@@ -303,7 +296,7 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, pare
             else
                 ---@type loopdebug.comp.Variables.Item
                 local var_item = {
-                    id = {}, -- a unique id
+                    id = _make_node_id(),
                     parent_id = parent_id,
                     data = {
                         path = '',
@@ -426,16 +419,16 @@ end
 ---@return any root_id
 function Variables:_upsert_watch_root()
     if not persistence.is_ws_open() then return end
-    local id = _get_root_id("watch")
-    if not self:get_item(id) then
-        ---@type loop.comp.ItemTree.Item
-        local root_item = {
-            id = id,
-            expanded = true,
-            data = { path = id, scopelabel = "Watch" }
-        }
-        self:upsert_item(root_item)
-    end
+    local id = "w"
+    local expanded = self._layout_cache[id]
+    if expanded == nil then expanded = true end        
+    ---@type loop.comp.ItemTree.Item
+    local root_item = {
+        id = id,
+        expanded = expanded,
+        data = { path = id, scopelabel = "Watch" }
+    }
+    self:upsert_item(root_item)
     return id
 end
 
@@ -444,23 +437,14 @@ end
 function Variables:_load_watch_expr_value(context, expr, forced_id)
     if not persistence.is_ws_open() then return end
     local parent_id = self:_upsert_watch_root()
-    local exising_items = self:get_item_and_children(parent_id)
-    local item_id = forced_id
-    if not item_id then
-        for _, item in ipairs(exising_items) do
-            if item and item.data and expr == item.data.name then
-                item_id = item.id
-                break
-            end
-        end
-    end
-    item_id = item_id or {}
+    item_id = forced_id or _make_node_id()
+    local path = "w/" .. expr
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = item_id,
         parent_id = parent_id,
-        expanded = self._layout_cache[expr],
-        data = { path = item_id, is_expr = true, name = expr }
+        expanded = self._layout_cache[path],
+        data = { path = path, is_expr = true, name = expr }
     }
 
     local data_source = self._current_data_source
@@ -488,8 +472,7 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
                     if var_item.data.greyout then
                         cb({})
                     else
-                        self:_load_variables(context, data_source.data_providers, data.variablesReference, var_item.id,
-                            var_item.id, cb)
+                        self:_load_variables(context, data_source.data_providers, data.variablesReference, var_item.id, path, cb)
                     end
                 end
             end
@@ -500,8 +483,9 @@ end
 
 ---@param context number
 function Variables:_load_watch_expressions(context)
-    if not persistence.is_ws_open() then return end
     local root_id = self:_upsert_watch_root()
+    self:remove_children(root_id)
+    if not persistence.is_ws_open() then return end
     local list = persistence.get_config("watch")
     if not list then
         return
@@ -514,25 +498,14 @@ end
 
 ---@param context number
 function Variables:_load_session_vars(context)
-    local data_source = self._current_data_source
-    if not data_source then return end
-
-    local root_id = _get_root_id("sess", data_source.session_id)
-
-    if not data_source.frame or not data_source.data_providers then
-        local items = self:get_item_and_children(root_id)
-        for _, item in ipairs(items) do
-            item.data.greyout = true
-        end
-        self:refresh_content()
-        return
-    end
-
+    local root_id = "s"
+    local expanded = self._layout_cache[root_id]
+    if expanded == nil then expanded = true end
     ---@type loop.comp.ItemTree.Item
     local root_item = {
         id = root_id,
-        expanded = true,
-        data = { path = root_id,  scopelabel = "Session: " .. data_source.session_name }
+        expanded = expanded,
+        data = { path = root_id, scopelabel = "Variables" }
     }
     ---@return loop.comp.ItemTree.Item
     local function make_na_item()
@@ -541,21 +514,25 @@ function Variables:_load_session_vars(context)
             data = { path = '', is_na = true },
         }
     end
-    root_item.children_callback = function(cb)
-        if not self:is_current_context(context) or not data_source.frame then
-            cb({ make_na_item() })
-            return
-        end
-        data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
-            if not self:is_current_context(context) then
+    local data_source = self._current_data_source
+    if data_source then
+        root_item.children_callback = function(cb)
+            if not self:is_current_context(context) or not data_source.frame then
+                cb({ make_na_item() })
                 return
             end
-            if scopes_data and scopes_data.scopes then
-                self:_load_scopes(context, root_item.id, root_item.id, scopes_data.scopes, data_source.data_providers, cb)
-            else
-                cb({ make_na_item() })
-            end
-        end)
+            data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
+                if not self:is_current_context(context) then
+                    return
+                end
+                if scopes_data and scopes_data.scopes then
+                    self:_load_scopes(context, root_item.id, root_item.id, scopes_data.scopes, data_source
+                        .data_providers, cb)
+                else
+                    cb({ make_na_item() })
+                end
+            end)
+        end
     end
     self:upsert_item(root_item)
 end
