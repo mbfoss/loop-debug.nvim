@@ -271,7 +271,6 @@ function Variables:_load_watch_expressions(context)
     local active_ids = {}
 
     for idx, expr in ipairs(list) do
-        -- Stable ID based on the index in the config list
         local item_id = "watch_index_" .. tostring(idx)
         active_ids[item_id] = true
         self:_load_watch_expr_value(context, expr, item_id)
@@ -289,17 +288,24 @@ end
 ---@param item_id any
 function Variables:_load_watch_expr_value(context, expr, item_id)
     local path = "w/" .. expr
+
+    -- Check if we already have this item to preserve existing data during greyout
+    local existing = self:get_item(item_id)
+
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = item_id,
         parent_id = "w",
         expanded = self._layout_cache[path],
-        data = { path = path, is_expr = true, name = expr }
+        data = existing and existing.data or { path = path, is_expr = true, name = expr }
     }
+    -- Ensure the name is correct if it was renamed
+    var_item.data.name = expr
 
     local ds = self._current_data_source
     if not ds or not ds.frame or not ds.data_providers then
-        var_item.data.value, var_item.data.is_na = "not available", true
+        -- Keep existing data but ensure it is marked as greyed out
+        var_item.data.greyout = true
         self:upsert_item(var_item)
         return
     end
@@ -313,6 +319,8 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
         else
             var_item.data.value = data.result
             var_item.data.presentationHint = data.presentationHint
+            var_item.data.is_na = false
+            var_item.data.greyout = false
             if data.variablesReference and data.variablesReference > 0 then
                 var_item.children_callback = function(cb)
                     self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, path, cb)
@@ -361,11 +369,14 @@ function Variables:link_to_buffer(comp)
             on_confirm = function(expr)
                 if not expr or expr == "" then return end
                 if not item then
-                    if _add_watch_expr(expr) then self:_update_data(self._query_context) end
+                    if _add_watch_expr(expr) then
+                        -- ONLY reload watches
+                        self:_load_watch_expressions(self._query_context)
+                    end
                 elseif expr ~= item.data.name then
                     if _replace_watch_expr(item.data.name, expr) then
-                        -- Since ID is index-based, the node persists; we just trigger a data refresh
-                        self:_update_data(self._query_context)
+                        -- ONLY reload watches
+                        self:_load_watch_expressions(self._query_context)
                     end
                 end
             end
@@ -387,7 +398,8 @@ function Variables:link_to_buffer(comp)
             if cur and cur.data.is_expr then
                 _remove_watch_expr(cur.data.name)
                 self:remove_item(cur.id)
-                self:_update_data(self._query_context)
+                -- ONLY reload watches to sync indices
+                self:_load_watch_expressions(self._query_context)
             end
         end
     })
