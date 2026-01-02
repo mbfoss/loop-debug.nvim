@@ -17,35 +17,35 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
 local Variables    = class(ItemTreeComp)
 
+---@param parent_id any
+---@param name string
+---@param index number
+---@return string
+local function _get_semantic_id(parent_id, name, index)
+    return string.format("%s::%s#%d", tostring(parent_id), name, index)
+end
+
 ---@param str string
 ---@param max_len number
 ---@return string preview
 ---@return boolean is_different
 local function _preview_string(str, max_len)
     max_len = max_len > 2 and max_len or 2
-    -- check conditions for returning as-is
     if #str < max_len and not str:find("\n", 1, true) then
         return str, false
     end
-    if #str < max_len then
-        -- replace newlines
-        preview = str:gsub("\n", "⏎")
-        return preview, true
-    end
-    local preview = str:sub(1, max_len):gsub("\n", "⏎")
-    preview = vim.fn.trim(preview, "", 2) .. "…"
-    return preview, true
+    local preview = str:gsub("\n", "⏎")
+    if #preview <= max_len then return preview, true end
+    return vim.fn.trim(preview:sub(1, max_len), "", 2) .. "…"
 end
 
 ---@param expr string
 ---@return boolean
-function _add_watch_expr(expr)
+local function _add_watch_expr(expr)
     if not persistence.is_ws_open() then return false end
     local data = persistence.get_config("watch") or {}
     ---@cast data string[]
-    for _, v in ipairs(data) do
-        if v == expr then return false end
-    end
+    for _, v in ipairs(data) do if v == expr then return false end end
     table.insert(data, expr)
     persistence.set_config("watch", data)
     return true
@@ -54,16 +54,15 @@ end
 ---@param old string
 ---@param new string
 ---@return boolean
-function _replace_watch_expr(old, new)
+local function _replace_watch_expr(old, new)
     local data = persistence.get_config("watch")
-    if data then
-        ---@cast data string[]
-        for i, v in ipairs(data) do
-            if v == old then
-                data[i] = new
-                persistence.set_config("watch", data)
-                return true
-            end
+    if not data then return false end
+    ---@cast data string[]
+    for i, v in ipairs(data) do
+        if v == old then
+            data[i] = new
+            persistence.set_config("watch", data)
+            return true
         end
     end
     return false
@@ -71,53 +70,38 @@ end
 
 ---@param expr string
 ---@return boolean
-function _remove_watch_expr(expr)
+local function _remove_watch_expr(expr)
     local data = persistence.get_config("watch")
-    if data then
-        ---@cast data string[]
-        for i, v in ipairs(data) do
-            if v == expr then
-                table.remove(data, i)
-                persistence.set_config("watch", data)
-                return true
-            end
+    if not data then return false end
+    ---@cast data string[]
+    for i, v in ipairs(data) do
+        if v == expr then
+            table.remove(data, i)
+            persistence.set_config("watch", data)
+            return true
         end
     end
     return false
 end
 
-local _last_node_id = 0
-local function _make_node_id()
-    _last_node_id = _last_node_id + 1
-    return _last_node_id
-end
-
+---@type table<string, string>
 local _var_kind_to_hl_group = {
-    property         = "@property",
-    method           = "@method",
-    ["class"]        = "@type",
-    data             = "@variable",
-    event            = "@event",
-    baseClass        = "@type",
-    innerClass       = "@type",
-    interface        = "@type",
-    mostDerivedClass = "@type",
-    virtual          = "@keyword",
+    property   = "@property",
+    method     = "@method",
+    ["class"]  = "@type",
+    data       = "@variable",
+    event      = "@event",
+    baseClass  = "@type",
+    innerClass = "@type",
+    interface  = "@type",
 }
----@param kind? loopdebug.proto.VariablePresentationHint.Kind
----@return string
-function _get_var_highlight(kind)
-    if not kind then
-        return "@variable"
-    end
-    return _var_kind_to_hl_group[kind] or "@variable"
-end
 
 ---@param id any
 ---@param data any
----@param highlights loop.Highlight
+---@param highlights loop.Highlight[]
 ---@return string
 local function _variable_node_formatter(id, data, highlights)
+    if not data then return "" end
     if data.is_na and not data.name then
         table.insert(highlights, { group = "NonText" })
         return "not available"
@@ -125,86 +109,54 @@ local function _variable_node_formatter(id, data, highlights)
 
     local hl = data.greyout and "NonText" or nil
 
-    if not data then return "" end
     if data.scopelabel then
         table.insert(highlights, { group = hl or "Directory" })
         return data.scopelabel
     end
 
-    local hint = data.presentationHint
-    local name = data.name and tostring(data.name) or "unknown"
-    local value = data.value and tostring(data.value) or ""
+    local name = tostring(data.name or "unknown")
+    local value = daptools.format_variable(tostring(data.value or ""), data.presentationHint)
+    local preview, is_different = _preview_string(value, vim.o.columns - 20)
 
-    value = daptools.format_variable(value, hint)
-    local preview, is_different = _preview_string(value, vim.o.columns)
     table.insert(highlights, { group = hl or "@symbol", start_col = 0, end_col = #name })
-    if data.is_na or data.greyout then
-        table.insert(highlights, { group = hl or "NonText", start_col = #name })
-    else
-        local start_col = #name
-        local end_col = start_col + 2
-        table.insert(highlights, { group = hl or "NonText", start_col = start_col, end_col = end_col })
-        start_col = end_col
-        end_col = start_col + #preview
-        local kind = hint and hint.kind or nil
-        table.insert(highlights, { group = _get_var_highlight(kind), start_col = start_col, end_col = end_col })
-        if is_different then
-            start_col = end_col
-            end_col = start_col + 1
-            table.insert(highlights, { group = hl or "NonText", start_col = start_col, end_col = end_col })
-        end
-    end
-    return name .. ': ' .. preview
-end
 
----@param id any
----@param data any
-local function _open_value_floatwin(id, data)
-    if data.is_na then
-        return
-    end
-    if data.scopelabel then
-        return
-    end
-    local hint = data.presentationHint
-    local value = data.value and tostring(data.value) or ""
-    local title = data.name or "value"
-    floatwin.show_floatwin(title, daptools.format_variable(value, hint))
+    local start = #name
+    table.insert(highlights, { group = hl or "NonText", start_col = start, end_col = start + 2 })
+
+    start = start + 2
+    local kind = data.presentationHint and data.presentationHint.kind
+    local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
+    table.insert(highlights, { group = val_hl, start_col = start, end_col = start + #preview })
+
+    return name .. ': ' .. preview
 end
 
 function Variables:init()
     ItemTreeComp.init(self, {
         formatter = _variable_node_formatter,
-        render_delay_ms = 300,
+        loading_char = "⧗",
+        render_delay_ms = 200,
     })
 
-    ---@type number
     self._query_context = 0
-
     ---@type loopdebug.events.CurrentViewUpdate|nil
     self._current_data_source = nil
-
-    ---@type table<any,boolean> -- id --> expanded
+    ---@type table<string, boolean>
     self._layout_cache = {}
+
     self:add_tracker({
-        on_toggle = function(id, data, expanded)
+        on_toggle = function(_, data, expanded)
             self._layout_cache[data.path] = expanded
         end,
-        on_open = function(id, data)
-            _open_value_floatwin(id, data)
+        on_open = function(_, data)
+            if data.scopelabel or data.is_na then return end
+            floatwin.show_floatwin(data.name or "value",
+                daptools.format_variable(tostring(data.value), data.presentationHint))
         end
     })
 
     ---@type loop.TrackerRef?
     self._events_tracker_ref = debugevents.add_tracker({
-        on_debug_start = function()
-        end,
-        on_debug_end = function()
-        end,
-        on_session_added = function(id, info)
-        end,
-        on_session_removed = function(id)
-        end,
         on_view_udpate = function(view)
             self._current_data_source = view
             self._query_context = self._query_context + 1
@@ -212,44 +164,18 @@ function Variables:init()
         end
     })
 
+    ---@type loop.TrackerRef?
     self._persistence_tracker_ref = persistence.add_tracker({
-        on_ws_open = function()
-            self:_update_data(self._query_context)
-        end,
-        on_ws_closed = function()
-        end,
-        on_ws_will_save = function()
-        end
+        on_ws_open = function() self:_update_data(self._query_context) end
     })
-end
-
-function Variables:dispose()
-    ItemTreeComp.dispose(self)
-    if self._events_tracker_ref then
-        self._events_tracker_ref.cancel()
-    end
-    if self._persistence_tracker_ref then
-        self._persistence_tracker_ref.cancel()
-    end
-end
-
----@param ctx number
----@return boolean
-function Variables:is_current_context(ctx)
-    return ctx == self._query_context
-end
-
-function Variables:_greyout_content()
-    local items = self:get_items()
-    for _, item in ipairs(items) do
-        item.data.greyout = true
-    end
-    self:refresh_content()
 end
 
 ---@param ctx number
 function Variables:_update_data(ctx)
-    self:_greyout_content()
+    local items = self:get_items()
+    for _, item in ipairs(items) do item.data.greyout = true end
+    self:refresh_content()
+
     self:_load_watch_expressions(ctx)
     self:_load_session_vars(ctx)
 end
@@ -261,218 +187,135 @@ end
 ---@param parent_path string
 ---@param callback fun(items:loopdebug.comp.Variables.Item[])
 function Variables:_load_variables(context, data_providers, ref, parent_id, parent_path, callback)
-    data_providers.variables_provider({ variablesReference = ref },
-        function(_, vars_data)
-            if not self:is_current_context(context) then return end
-            local children = {}
-            if vars_data then
-                for var_idx, var in ipairs(vars_data.variables) do
-                    local item_id = _make_node_id()
-                    local path = parent_path .. '/' .. var.name
-                    ---@type loopdebug.comp.Variables.Item
-                    local var_item = {
-                        id = item_id,
-                        parent_id = parent_id,
-                        expanded = self._layout_cache[path],
-                        data = {
-                            path = path,
-                            name = var.name,
-                            value = var.value,
-                            presentationHint = var.presentationHint
-                        },
-                    }
-                    if var.variablesReference and var.variablesReference > 0 then
-                        var_item.children_callback = function(cb)
-                            if var_item.data.greyout then
-                                cb({})
-                            else
-                                self:_load_variables(context, data_providers, var.variablesReference, item_id, path, cb)
-                            end
-                        end
-                    end
-                    table.insert(children, var_item)
-                end
-            else
+    data_providers.variables_provider({ variablesReference = ref }, function(_, vars_data)
+        if self._query_context ~= context then return end
+        local children = {}
+        if vars_data and vars_data.variables then
+            for idx, var in ipairs(vars_data.variables) do
+                local item_id = _get_semantic_id(parent_id, var.name, idx)
+                local path = parent_path .. '/' .. var.name
+
                 ---@type loopdebug.comp.Variables.Item
                 local var_item = {
-                    id = _make_node_id(),
+                    id = item_id,
                     parent_id = parent_id,
+                    expanded = self._layout_cache[path],
                     data = {
-                        path = '',
-                        is_na = true
+                        path = path,
+                        name = var.name,
+                        value = var.value,
+                        presentationHint = var.presentationHint
                     },
                 }
+
+                if var.variablesReference and var.variablesReference > 0 then
+                    var_item.children_callback = function(cb)
+                        if var_item.data.greyout then
+                            cb({})
+                        else
+                            self:_load_variables(context, data_providers, var.variablesReference, item_id, path, cb)
+                        end
+                    end
+                end
                 table.insert(children, var_item)
             end
-            callback(children)
-        end)
+        end
+        callback(children)
+    end)
 end
 
 ---@param context number
 ---@param parent_id string
 ---@param parent_path string
 ---@param scopes loopdebug.proto.Scope[]
----@param data_providers loopdebug.session.DataProviders
+---@param data_source loopdebug.events.CurrentViewUpdate
 ---@param scopes_cb loop.comp.ItemTree.ChildrenCallback
-function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_providers, scopes_cb)
+function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_source, scopes_cb)
     ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}
-    for scope_idx, scope in ipairs(scopes) do
-        local item_id = _make_node_id()
+    for idx, scope in ipairs(scopes) do
         local path = parent_path .. '/' .. scope.name
-        local prefix = scope.expensive and "⏱ " or ""
+        local item_id = _get_semantic_id(parent_id, scope.name, idx)
+
         local expanded = self._layout_cache[path]
         if expanded == nil then
-            if scope.expensive
-                or scope.presentationHint == "globals"
-                or scope.name == "Globals"
-                or scope.presentationHint == "registers"
-            then
-                expanded = false
-            else
-                expanded = true
-            end
+            expanded = not (scope.expensive or scope.presentationHint == "globals" or scope.name == "Registers")
         end
+
         ---@type loop.comp.ItemTree.Item
         local scope_item = {
             id = item_id,
             parent_id = parent_id,
             expanded = expanded,
-            data = { path = path, scopelabel = prefix .. scope.name }
+            data = { path = path, scopelabel = (scope.expensive and "⏱ " or "") .. scope.name }
         }
         scope_item.children_callback = function(cb)
-            if scope_item.data.greyout then
-                cb({})
-            else
-                self:_load_variables(context, data_providers, scope.variablesReference, item_id, path, cb)
-            end
+            self:_load_variables(context, data_source.data_providers, scope.variablesReference, item_id, path, cb)
         end
         table.insert(scope_items, scope_item)
     end
     scopes_cb(scope_items)
 end
 
----@param comp loop.CompBufferController
-function Variables:link_to_buffer(comp)
-    ItemTreeComp.link_to_buffer(self, comp)
+---@param context number
+function Variables:_load_watch_expressions(context)
+    local root_id = "w"
+    local root_expanded = self._layout_cache[root_id]
+    if root_expanded == nil then root_expanded = true end
 
-    ---@param item loop.comp.ItemTree.Item|nil
-    local function add_or_edit_watch(item)
-        local win = vim.api.nvim_get_current_win()
-        local cursor = vim.api.nvim_win_get_cursor(win)
-        local col_offset = -cursor[2]
-        local row_offset = 0
-        local text
-        if item and item.data then text = item.data.name end
-        text = text or ""
-        floatwin.input_at_cursor({
-            row_offset = row_offset,
-            col_offset = col_offset,
-            default_width = 20,
-            default_text = text,
-            on_confirm = function(expr)
-                if not expr then return end
-                if not item then
-                    if _add_watch_expr(expr) then
-                        self:_load_watch_expr_value(self._query_context, expr)
-                    end
-                elseif item.data and item.data.name and expr ~= item.data.name then
-                    if _replace_watch_expr(item.data.name, expr) then
-                        item.data.name = expr
-                        self:_load_watch_expr_value(self._query_context, expr, item.id)
-                    end
-                end
-            end
-        })
+    self:upsert_item({ id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
+
+    if not persistence.is_ws_open() then return end
+    local list = persistence.get_config("watch") or {}
+    ---@cast list string[]
+    local active_ids = {}
+
+    for idx, expr in ipairs(list) do
+        -- Stable ID based on the index in the config list
+        local item_id = "watch_index_" .. tostring(idx)
+        active_ids[item_id] = true
+        self:_load_watch_expr_value(context, expr, item_id)
     end
 
-    -- Add keymaps
-    comp.add_keymap("i", {
-        desc = "Add watch (inline)",
-        callback = function() add_or_edit_watch(nil) end,
-    })
-    comp.add_keymap("c", {
-        desc = "Change watch expression",
-        callback = function()
-            ---@type loop.comp.ItemTree.Item|nil
-            local cur_item = self:get_cur_item(comp)
-            if not cur_item then return end
-            if not cur_item.data.is_expr then return end
-            add_or_edit_watch(cur_item)
-        end,
-    })
-    comp.add_keymap("d", {
-        desc = "Delete watch",
-        callback = function()
-            ---@type loop.comp.ItemTree.Item|nil
-            local cur_item = self:get_cur_item(comp)
-            if not cur_item then return end
-            if not cur_item.data.is_expr then return end
-            _remove_watch_expr(cur_item.data.name)
-            self._layout_cache[cur_item.id] = nil
-            self:remove_item(cur_item.id)
-        end,
-    })
-end
-
----@return any root_id
-function Variables:_upsert_watch_root()
-    if not persistence.is_ws_open() then return end
-    local id = "w"
-    local expanded = self._layout_cache[id]
-    if expanded == nil then expanded = true end        
-    ---@type loop.comp.ItemTree.Item
-    local root_item = {
-        id = id,
-        expanded = expanded,
-        data = { path = id, scopelabel = "Watch" }
-    }
-    self:upsert_item(root_item)
-    return id
+    for _, item in ipairs(self:get_items()) do
+        if item.parent_id == root_id and not active_ids[item.id] then
+            self:remove_item(item.id)
+        end
+    end
 end
 
 ---@param context number
 ---@param expr string
-function Variables:_load_watch_expr_value(context, expr, forced_id)
-    if not persistence.is_ws_open() then return end
-    local parent_id = self:_upsert_watch_root()
-    item_id = forced_id or _make_node_id()
+---@param item_id any
+function Variables:_load_watch_expr_value(context, expr, item_id)
     local path = "w/" .. expr
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = item_id,
-        parent_id = parent_id,
+        parent_id = "w",
         expanded = self._layout_cache[path],
         data = { path = path, is_expr = true, name = expr }
     }
 
-    local data_source = self._current_data_source
-    if not data_source or not data_source.frame or not data_source.data_providers then
-        var_item.data.value = "not available"
-        var_item.data.is_na = true
+    local ds = self._current_data_source
+    if not ds or not ds.frame or not ds.data_providers then
+        var_item.data.value, var_item.data.is_na = "not available", true
         self:upsert_item(var_item)
         return
     end
 
-    data_source.data_providers.evaluate_provider({
-        expression = expr,
-        frameId = data_source.frame.id,
-        context = 'watch',
+    ds.data_providers.evaluate_provider({
+        expression = expr, frameId = ds.frame.id, context = 'watch',
     }, function(err, data)
-        if not self:is_current_context(context) then return end
+        if self._query_context ~= context then return end
         if err or not data then
-            var_item.data.value = "not available"
-            var_item.data.is_na = true
+            var_item.data.value, var_item.data.is_na = "not available", true
         else
             var_item.data.value = data.result
             var_item.data.presentationHint = data.presentationHint
             if data.variablesReference and data.variablesReference > 0 then
                 var_item.children_callback = function(cb)
-                    if var_item.data.greyout then
-                        cb({})
-                    else
-                        self:_load_variables(context, data_source.data_providers, data.variablesReference, var_item.id, path, cb)
-                    end
+                    self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, path, cb)
                 end
             end
         end
@@ -481,59 +324,79 @@ function Variables:_load_watch_expr_value(context, expr, forced_id)
 end
 
 ---@param context number
-function Variables:_load_watch_expressions(context)
-    local root_id = self:_upsert_watch_root()
-    self:remove_children(root_id)
-    if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("watch")
-    if not list then
-        return
-    end
-    ---@cast list string[]
-    for _, expr in ipairs(list) do
-        self:_load_watch_expr_value(context, expr)
-    end
-end
-
----@param context number
 function Variables:_load_session_vars(context)
     local root_id = "s"
-    local expanded = self._layout_cache[root_id]
-    if expanded == nil then expanded = true end
+    local root_expanded = self._layout_cache[root_id]
+    if root_expanded == nil then root_expanded = true end
+
     ---@type loop.comp.ItemTree.Item
     local root_item = {
-        id = root_id,
-        expanded = expanded,
-        data = { path = root_id, scopelabel = "Variables" }
+        id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Variables" }
     }
-    ---@return loop.comp.ItemTree.Item
-    local function make_na_item()
-        return {
-            id = {}, -- a unique id
-            data = { path = '', is_na = true },
-        }
-    end
-    local data_source = self._current_data_source
-    if data_source then
+
+    local ds = self._current_data_source
+    if ds and ds.frame then
         root_item.children_callback = function(cb)
-            if not self:is_current_context(context) or not data_source.frame then
-                cb({ make_na_item() })
-                return
-            end
-            data_source.data_providers.scopes_provider({ frameId = data_source.frame.id }, function(_, scopes_data)
-                if not self:is_current_context(context) then
-                    return
-                end
+            ds.data_providers.scopes_provider({ frameId = ds.frame.id }, function(_, scopes_data)
+                if self._query_context ~= context then return end
                 if scopes_data and scopes_data.scopes then
-                    self:_load_scopes(context, root_item.id, root_item.id, scopes_data.scopes, data_source
-                        .data_providers, cb)
+                    self:_load_scopes(context, root_id, root_id, scopes_data.scopes, ds, cb)
                 else
-                    cb({ make_na_item() })
+                    cb({ { id = "na", data = { is_na = true } } })
                 end
             end)
         end
     end
     self:upsert_item(root_item)
+end
+
+---@param comp loop.CompBufferController
+function Variables:link_to_buffer(comp)
+    ItemTreeComp.link_to_buffer(self, comp)
+
+    ---@param item loopdebug.comp.Variables.Item|nil
+    local function add_or_edit_watch(item)
+        floatwin.input_at_cursor({
+            default_text = item and item.data.name or "",
+            on_confirm = function(expr)
+                if not expr or expr == "" then return end
+                if not item then
+                    if _add_watch_expr(expr) then self:_update_data(self._query_context) end
+                elseif expr ~= item.data.name then
+                    if _replace_watch_expr(item.data.name, expr) then
+                        -- Since ID is index-based, the node persists; we just trigger a data refresh
+                        self:_update_data(self._query_context)
+                    end
+                end
+            end
+        })
+    end
+
+    comp.add_keymap("i", { desc = "Add watch", callback = function() add_or_edit_watch() end })
+    comp.add_keymap("c", {
+        desc = "Edit watch",
+        callback = function()
+            local cur = self:get_cur_item(comp)
+            if cur and cur.data.is_expr then add_or_edit_watch(cur) end
+        end
+    })
+    comp.add_keymap("d", {
+        desc = "Delete watch",
+        callback = function()
+            local cur = self:get_cur_item(comp)
+            if cur and cur.data.is_expr then
+                _remove_watch_expr(cur.data.name)
+                self:remove_item(cur.id)
+                self:_update_data(self._query_context)
+            end
+        end
+    })
+end
+
+function Variables:dispose()
+    ItemTreeComp.dispose(self)
+    if self._events_tracker_ref then self._events_tracker_ref.cancel() end
+    if self._persistence_tracker_ref then self._persistence_tracker_ref.cancel() end
 end
 
 return Variables

@@ -17,8 +17,8 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field frame loopdebug.proto.StackFrame|nil
 
 ---@class loopdebug.events.Tracker
----@field on_debug_start fun()
----@field on_debug_end fun(success:boolean)
+---@field on_debug_start fun()?
+---@field on_debug_end fun(success:boolean)?
 ---@field on_session_added fun(id:number,info:loopdebug.events.SessionInfo)?
 ---@field on_session_update fun(id:number,info:loopdebug.events.SessionInfo)?
 ---@field on_session_removed fun(id:number)?
