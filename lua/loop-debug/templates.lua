@@ -38,7 +38,7 @@ return {
             __order = field_order,
             name = "Debug",
             type = "debug",
-            command = "${prompt:Select binary: }",
+            command = "${prompt:Select binary,./,file}",
             cwd = "${wsdir}",
             debugger = "lldb",
             request = "launch",
@@ -83,7 +83,7 @@ return {
             debugger = "js-debug",
             request = "attach",
             address = "127.0.0.1",
-            port = "${prompt:Inspector port: }",
+            port = "${prompt:Inspector port}",
             restart = true,
         }
     },

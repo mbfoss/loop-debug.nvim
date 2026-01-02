@@ -133,5 +133,3 @@ function SessionListComp:_refresh()
 end
 
 return SessionListComp
-
-

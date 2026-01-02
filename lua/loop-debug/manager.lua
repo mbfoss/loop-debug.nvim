@@ -1,11 +1,11 @@
 local SessionList        = require('loop-debug.comp.SessionList')
-local notifications      = require('loop.notifications')
-local selector           = require('loop.tools.selector')
 local breakpoints        = require('loop-debug.breakpoints')
 local breakpointsmonitor = require('loop-debug.breakpointsmonitor')
-local floatwin           = require('loop-debug.tools.floatwin')
 local daptools           = require('loop-debug.dap.daptools')
 local debugevents        = require('loop-debug.debugevents')
+local notifications      = require('loop.notifications')
+local selector           = require('loop.tools.selector')
+local floatwin           = require('loop.tools.floatwin')
 
 local M                  = {}
 
@@ -620,9 +620,9 @@ local function _process_inspect_var_command(jobdata)
         if _is_current_context(jobdata, ctx, "frame") then
             if data and data.result then
                 local title = data.type and (expr .. ' - ' .. data.type) or expr
-                floatwin.open_inspect_win(title, daptools.format_variable(data.result, data.presentationHint))
+                floatwin.show_floatwin(title, daptools.format_variable(data.result, data.presentationHint))
             else
-                floatwin.open_inspect_win("Error", err or "not available")
+                floatwin.show_floatwin("Error", err or "not available")
             end
         end
     end)

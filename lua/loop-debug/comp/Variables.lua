@@ -1,8 +1,7 @@
 local class        = require('loop.tools.class')
+local floatwin     = require('loop.tools.floatwin')
 local ItemTreeComp = require('loop.comp.ItemTree')
-local strtools     = require('loop.tools.strtools')
 local persistence  = require('loop-debug.persistence')
-local floatwin     = require('loop-debug.tools.floatwin')
 local daptools     = require('loop-debug.dap.daptools')
 local debugevents  = require('loop-debug.debugevents')
 
@@ -170,7 +169,7 @@ local function _open_value_floatwin(id, data)
     local hint = data.presentationHint
     local value = data.value and tostring(data.value) or ""
     local title = data.name or "value"
-    floatwin.open_inspect_win(title, daptools.format_variable(value, hint))
+    floatwin.show_floatwin(title, daptools.format_variable(value, hint))
 end
 
 function Variables:init()
