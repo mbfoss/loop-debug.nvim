@@ -205,7 +205,7 @@ function M.init()
     persistence.add_tracker({
         on_ws_closed = function()
             M.hide()
-        end
+        end,
     })
 end
 
