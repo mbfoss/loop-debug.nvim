@@ -116,13 +116,15 @@ local function _variable_node_formatter(id, data, highlights)
 
     local name = tostring(data.name or "unknown")
     local value = daptools.format_variable(tostring(data.value or ""), data.presentationHint)
-    local preview, is_different = _preview_string(value, vim.o.columns - 20)
+    local preview, _ = _preview_string(value, vim.o.columns - 20)
 
     table.insert(highlights, { group = hl or "@symbol", start_col = 0, end_col = #name })
 
     local start = #name
     table.insert(highlights, { group = hl or "NonText", start_col = start, end_col = start + 2 })
 
+    if data.is_na then hl = "NonText" end
+    
     start = start + 2
     local kind = data.presentationHint and data.presentationHint.kind
     local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
@@ -134,7 +136,6 @@ end
 function Variables:init()
     ItemTreeComp.init(self, {
         formatter = _variable_node_formatter,
-        loading_char = "⧗",
         render_delay_ms = 200,
     })
 
@@ -271,14 +272,15 @@ function Variables:_load_watch_expressions(context)
     local active_ids = {}
 
     for idx, expr in ipairs(list) do
-        local item_id = "watch_index_" .. tostring(idx)
+        local item_id = "watch." .. tostring(idx)
         active_ids[item_id] = true
         self:_load_watch_expr_value(context, expr, item_id)
     end
 
-    for _, item in ipairs(self:get_items()) do
-        if item.parent_id == root_id and not active_ids[item.id] then
-            self:remove_item(item.id)
+    local children = self:get_children(root_id)
+    for _, child in ipairs(children) do
+        if not active_ids[child.id] then
+            self:remove_item(child.id)
         end
     end
 end
@@ -315,7 +317,9 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
     }, function(err, data)
         if self._query_context ~= context then return end
         if err or not data then
-            var_item.data.value, var_item.data.is_na = "not available", true
+            var_item.data.value = "not available"
+            var_item.data.is_na = true
+            var_item.data.greyout = false            
         else
             var_item.data.value = data.result
             var_item.data.presentationHint = data.presentationHint
