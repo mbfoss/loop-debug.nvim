@@ -3,7 +3,7 @@ local breakpoints        = require('loop-debug.breakpoints')
 local breakpointsmonitor = require('loop-debug.breakpointsmonitor')
 local daptools           = require('loop-debug.dap.daptools')
 local debugevents        = require('loop-debug.debugevents')
-local notifications      = require('loop.notifications')
+local logs               = require('loop.logs')
 local selector           = require('loop.tools.selector')
 local floatwin           = require('loop.tools.floatwin')
 
@@ -270,7 +270,7 @@ local function _switch_to_session(jobdata, sess_id, thread_pause_evt)
             if not _is_current_context(jobdata, ctx, "pause") then return end
 
             if err or not resp or not resp.threads then
-                notifications.notify("Failed to load thread list - " .. (err or ""))
+                vim.notify("Failed to load thread list - " .. (err or ""))
             else
                 -- Update thread names and paused state
                 sess_data.thread_names = {}
@@ -541,13 +541,13 @@ end
 local function _process_select_thread_command(jobdata)
     local sess_id = jobdata.current_session_id
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
-    if not sess_data then return false, "No active debug session" end
+    if not sess_id or not sess_data then return false, "No active debug session" end
 
     local ctx = _build_context(jobdata)
     sess_data.data_providers.threads_provider(function(err, data)
         if _is_current_context(jobdata, ctx, "pause") then
             if err or not data or not data.threads then
-                notifications.notify("Failed to load thread list: " .. (err or ""))
+                vim.notify("Failed to load thread list: " .. (err or ""))
             else
                 local choices = {}
                 for _, thread in pairs(data.threads) do
@@ -581,7 +581,7 @@ local function _process_select_frame_command(jobdata)
     sess_data.data_providers.stack_provider({ threadId = thread_id }, function(err, data)
         if _is_current_context(jobdata, ctx, "thread") then
             if err or not data then
-                notifications.notify("Failed to load call stack: " .. (err or ""))
+                vim.notify("Failed to load call stack: " .. (err or ""))
             else
                 local choices = {}
                 for _, frame in pairs(data.stackFrames) do
@@ -689,8 +689,13 @@ function M.track_new_debugjob(task_name, page_manager)
             local pg = jobdata.page_manager.get_page_group(_page_groups.output)
                 or jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
             local pd, err = pg.add_page({
-                id = "term." .. name .. vim.loop.hrtime(), type = "term", buftype = "term", label = "Debug Server", term_args =
-            start_args, activate = true
+                id = "term." .. name .. vim.loop.hrtime(),
+                type = "term",
+                buftype = "term",
+                label = "Debug Server",
+                term_args =
+                    start_args,
+                activate = true
             })
             if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
         end,
@@ -711,7 +716,7 @@ function M.debug_command(command, arg1)
 
     local jobdata = _current_job_data
     if not jobdata then
-        notifications.notify("No active debug task", vim.log.levels.WARN)
+        vim.notify("No active debug task", vim.log.levels.WARN)
         return
     end
 
@@ -740,7 +745,7 @@ function M.debug_command(command, arg1)
     local sess_id = jobdata.current_session_id
     local sess_data = sess_id and jobdata.session_data[sess_id]
     if not sess_data then
-        notifications.notify("No active debug session", vim.log.levels.WARN); return
+        vim.notify("No active debug session", vim.log.levels.WARN); return
     end
 
     if command == 'pause' then
@@ -748,7 +753,7 @@ function M.debug_command(command, arg1)
     end
 
     if not sess_data.cur_thread_id then
-        notifications.notify("No thread selected", vim.log.levels.WARN); return
+        vim.notify("No thread selected", vim.log.levels.WARN); return
     end
 
     local step_map = {
@@ -763,7 +768,7 @@ function M.debug_command(command, arg1)
         -- but strictly standard DAP uses separate reqs. Assuming loop controller handles it.
         sess_data.controller[command](sess_data.cur_thread_id, command == 'continue')
     else
-        notifications.notify("Invalid debug command: " .. tostring(command), vim.log.levels.WARN)
+        vim.notify("Invalid debug command: " .. tostring(command), vim.log.levels.WARN)
     end
 end
 

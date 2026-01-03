@@ -6,6 +6,7 @@ local manager = require('loop-debug.manager')
 local breakpoints = require('loop-debug.breakpoints')
 local wsinfo = require('loop.wsinfo')
 local fntools = require('loop.tools.fntools')
+local logs = require('loop.logs')
 
 ---@param args loop.DebugJob.StartArgs
 ---@param page_manager loop.PageManager
@@ -20,7 +21,7 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
                 .type)))
     end
 
-    --notifications.notify("Starting job:\n" .. vim.inspect(start_args))
+    logs.log("Starting debug job:\n" .. vim.inspect(args))
     local job = DebugJob:new(args.name)
 
     local bpts_tracker_ref = breakpoints.add_tracker({
