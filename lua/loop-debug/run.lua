@@ -21,7 +21,7 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
                 .type)))
     end
 
-    logs.log("Starting debug job:\n" .. vim.inspect(args))
+    logs.log("Starting debug:\n" .. vim.inspect(args))
     local job = DebugJob:new(args.name)
 
     local bpts_tracker_ref = breakpoints.add_tracker({
