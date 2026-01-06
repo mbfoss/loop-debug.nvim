@@ -124,7 +124,7 @@ local function _variable_node_formatter(id, data, highlights)
     table.insert(highlights, { group = hl or "NonText", start_col = start, end_col = start + 2 })
 
     if data.is_na then hl = "NonText" end
-    
+
     start = start + 2
     local kind = data.presentationHint and data.presentationHint.kind
     local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
@@ -151,8 +151,9 @@ function Variables:init()
         end,
         on_open = function(_, data)
             if data.scopelabel or data.is_na then return end
-            floatwin.show_floatwin(data.name or "value",
-                daptools.format_variable(tostring(data.value), data.presentationHint))
+            floatwin.show_floatwin(daptools.format_variable(tostring(data.value), data.presentationHint), {
+                title = data.name or "value"
+            })
         end
     })
 
@@ -319,7 +320,7 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
         if err or not data then
             var_item.data.value = "not available"
             var_item.data.is_na = true
-            var_item.data.greyout = false            
+            var_item.data.greyout = false
         else
             var_item.data.value = data.result
             var_item.data.presentationHint = data.presentationHint

@@ -606,7 +606,7 @@ local function _process_inspect_var_command(jobdata)
     if not sess_data then return false, "No active debug session" end
 
     local dbgtools = require('loop-debug.tools.dbgtools')
-    local expr, expr_err = dbgtools.clean_cword()
+    local expr, expr_err = dbgtools.get_value_for_inspect()
     if not expr then return false, expr_err or "No text under the cursor" end
 
     local frame = sess_data.cur_frame
@@ -620,9 +620,11 @@ local function _process_inspect_var_command(jobdata)
         if _is_current_context(jobdata, ctx, "frame") then
             if data and data.result then
                 local title = data.type and (expr .. ' - ' .. data.type) or expr
-                floatwin.show_floatwin(title, daptools.format_variable(data.result, data.presentationHint))
+                floatwin.show_floatwin(daptools.format_variable(data.result, data.presentationHint), {
+                    title = title
+                })
             else
-                floatwin.show_floatwin("Error", err or "not available")
+                floatwin.show_floatwin(err or "not available", { title = "Error" })
             end
         end
     end)
