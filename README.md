@@ -16,14 +16,48 @@
 > [!WARNING]
 > **Work in Progress**: This plugin is in early development and not ready for public release yet.
 
+# loop-debug.nvim
+
+Debugging extension for [loop.nvim](https://github.com/mbfoss/loop.nvim). Provides DAP integration via `debug` task types.
+
+## Features
+
+- **Clean and useful UI integration**
+- **Breakpoints**
+- **Watch expressions** 
+- **Callstack** 
+- **Debugger console (REPL)** 
+- **Debuggee output (With run-in-terminal support)** 
+- **Multisession support**
+
+> [!WARNING]
+> This plugin uses it's own DAP implementation and approach to configuration and does not require or depend on `nvim-dap`.
+
 ## Requirements
 
-## 🤝 Contributing
+- Neovim >= 0.10
+- [loop.nvim](https://github.com/mbfoss/loop.nvim)
+
+## Installation
+
+**With lazy.nvim**
+```lua
+{
+    "mbfoss/loop-debug.nvim"
+}
+```
+
+**With packer.nvim**
+```lua
+use {
+    'mbfoss/loop-debug.nvim',
+}
+```
+
+## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
----
+## License
 
-## 📄 License
-
-Distributed under the MIT License.
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
