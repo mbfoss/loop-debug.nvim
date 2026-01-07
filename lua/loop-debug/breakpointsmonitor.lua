@@ -1,6 +1,7 @@
 local config        = require('loop-debug.config')
 local signsmgr      = require('loop-debug.tools.signsmgr')
 local breakpoints   = require('loop-debug.breakpoints')
+local debugevents   = require('loop-debug.debugevents')
 local selector      = require("loop.tools.selector")
 local wsinfo        = require("loop.wsinfo")
 local uitools       = require("loop.tools.uitools")
@@ -130,45 +131,38 @@ local function _on_all_breakpoints_removed(removed)
     end
 end
 
----@param task_name string -- task name
----@return loop.job.debugjob.Tracker
-function _start(task_name)
-    assert(_init_done, _init_err_msg)
-    assert(type(task_name) == "string")
+---@param id number
+local function _on_session_added(id)
+    for bp_id, data in pairs(_breakpoints_data) do
+        data.states = data.states or {}
+        data.states[id] = false
+        _refresh_breakpoint_sign(bp_id, data)
+    end
+end
 
-    ---@type loop.job.debugjob.Tracker
-    local tracker = {
-        on_sess_added = function(id, name, parent_id, ctrl, providers)
-            for bp_id, data in pairs(_breakpoints_data) do
-                data.states = data.states or {}
-                data.states[id] = false
-                _refresh_breakpoint_sign(bp_id, data)
+---@param id number
+local function _on_session_removed(id)
+    for bp_id, data in pairs(_breakpoints_data) do
+        if data.states then
+            data.states[id] = nil
+            _refresh_breakpoint_sign(bp_id, data)
+        end
+    end
+end
+
+---@type fun(sess_id: number, event: loopdebug.session.notify.BreakpointState[])
+local function _on_breakpoints_update(sess_id, event)
+    for _, state in ipairs(event) do
+        local bp = _breakpoints_data[state.breakpoint_id]
+        if bp then
+            bp.states = bp.states or {}
+            bp.states[sess_id] = state.verified
+            local data = _breakpoints_data[state.breakpoint_id]
+            if data then
+                _refresh_breakpoint_sign(state.breakpoint_id, data)
             end
-        end,
-        on_sess_removed = function(id, name)
-            for bp_id, data in pairs(_breakpoints_data) do
-                if data.states then
-                    data.states[id] = nil
-                    _refresh_breakpoint_sign(bp_id, data)
-                end
-            end
-        end,
-        on_breakpoint_event = function(sess_id, session_name, event)
-            for _, state in ipairs(event) do
-                local bp = _breakpoints_data[state.breakpoint_id]
-                if bp then
-                    bp.states = bp.states or {}
-                    bp.states[sess_id] = state.verified
-                    local data = _breakpoints_data[state.breakpoint_id]
-                    if data then
-                        _refresh_breakpoint_sign(state.breakpoint_id, data)
-                    end
-                end
-            end
-        end,
-        on_exit = function(code) end
-    }
-    return tracker
+        end
+    end
 end
 
 local function _enable_breakpoint_sync_on_save()
@@ -269,6 +263,12 @@ function M.init()
         on_added = _on_breakpoint_added,
         on_removed = _on_breakpoint_removed,
         on_all_removed = _on_all_breakpoints_removed
+    })
+
+    debugevents.add_tracker({
+        on_session_added = _on_session_added,
+        on_session_removed = _on_session_removed,
+        on_breakpoints_update = _on_breakpoints_update,
     })
 end
 

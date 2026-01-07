@@ -3,7 +3,6 @@ local breakpoints        = require('loop-debug.breakpoints')
 local breakpointsmonitor = require('loop-debug.breakpointsmonitor')
 local daptools           = require('loop-debug.dap.daptools')
 local debugevents        = require('loop-debug.debugevents')
-local logs               = require('loop.logs')
 local selector           = require('loop.tools.selector')
 local floatwin           = require('loop.tools.floatwin')
 
@@ -706,6 +705,9 @@ function M.track_new_debugjob(task_name, page_manager)
                 if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
             end
         end,
+         on_breakpoint_event = function (sess_id, sess_name, event)
+            debugevents.report_breakpoints_update(sess_id, event)
+         end,
         on_startup_error = function ()
             _current_job_data = nil
             debugevents.report_debug_end(false)         

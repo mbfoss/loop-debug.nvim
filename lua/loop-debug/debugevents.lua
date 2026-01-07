@@ -23,6 +23,7 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field on_session_update fun(id:number,info:loopdebug.events.SessionInfo)?
 ---@field on_session_removed fun(id:number)?
 ---@field on_view_udpate fun(view:loopdebug.events.CurrentViewUpdate)?
+---@field on_breakpoints_update fun(sess_id:number,event:loopdebug.session.notify.BreakpointsEvent)?
 
 ---@type loop.tools.Trackers<loopdebug.events.Tracker>
 local _trackers = Trackers:new()
@@ -84,6 +85,12 @@ end
 function M.report_view_update(view)
     _current_view = view
     _trackers:invoke("on_view_udpate", view);
+end
+
+---@param sess_id number
+---@param event loopdebug.session.notify.BreakpointsEvent
+function M.report_breakpoints_update(sess_id, event)
+    _trackers:invoke("on_breakpoints_update", sess_id, event);    
 end
 
 return M
