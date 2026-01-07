@@ -115,7 +115,7 @@ local function _debug_subcommands(args)
         return _debug_commands()
     end
     if #args == 3 and args[2] == "breakpoint" then
-        return { "list", "toggle", "logpoint", "clear_file", "clear_all" }
+        return { "list", "toggle", "logpoint", "conditional", "clear_file", "clear_all" }
     end
     return {}
 end
@@ -185,7 +185,8 @@ function M.select_command()
     local breakpoint_cmds = {
         { "list",       "List breakpoints" },
         { "toggle",     "Toggle breakpoint" },
-        { "logpoint",   "Toggle logpoint" },
+        { "logpoint",   "Create a logpoint" },
+        { "conditional",   "Create a conditional breakpoint" },
         { "clear_file", "Clear breakpoints in file" },
         { "clear_all",  "Clear all breakpoints" },
     }

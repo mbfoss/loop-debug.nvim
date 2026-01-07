@@ -194,6 +194,16 @@ function M.set_logpoint(file, lnum, message)
 end
 
 ---@param file string
+---@param lnum number
+---@param condition? string
+---@param hit_condition? string
+function M.set_cond_breakpoint(file, lnum, condition, hit_condition)
+    file = _norm(file)
+    _remove_source_breakpoint(file, lnum)
+    _add_source_breakpoint(file, lnum, condition, hit_condition, nil)
+end
+
+---@param file string
 function M.clear_file_breakpoints(file)
     _clear_file_breakpoints(_norm(file))
 end
@@ -242,7 +252,7 @@ function M.for_each(handler)
     end
 end
 
----@param command nil|"toggle"|"logpoint"|"clear_file"|"clear_all"
+---@param command nil|"toggle"|"logpoint"|"conditional"|"clear_file"|"clear_all"
 function M.breakpoints_command(command)
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
@@ -256,15 +266,30 @@ function M.breakpoints_command(command)
             M.toggle_breakpoint(file, line)
         end
     elseif command == "logpoint" then
-        vim.ui.input({ prompt = "Enter log message: " }, function(message)
-            if message and message ~= "" then
-                local file, line = uitools.get_current_file_and_line()
-                if file and line then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            vim.ui.input({ prompt = "Enter log message: " }, function(message)
+                if message and message ~= "" then
                     M.set_logpoint(file, line, message)
                     print("Logpoint set at " .. file .. ":" .. line)
                 end
-            end
-        end)
+            end)
+        end
+    elseif command == "conditional" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            vim.ui.input({ prompt = "Condition (empty for none): " }, function(cond)
+                if cond then
+                    vim.ui.input({ prompt = "Hit condition (empty for none): " }, function(hit)
+                        if hit then
+                            if cond == "" then cond = nil end
+                            if hit == "" then hit = nil end
+                            M.set_cond_breakpoint(file, line, cond, hit)
+                        end
+                    end)
+                end
+            end)
+        end
     elseif command == "clear_file" then
         local bufnr = vim.api.nvim_get_current_buf()
         if vim.api.nvim_buf_is_valid(bufnr) then
