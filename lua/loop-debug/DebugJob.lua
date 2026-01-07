@@ -27,6 +27,7 @@ local Trackers = require("loop.tools.Trackers")
 ---@field terminate fun()
 
 ---@class loop.job.debugjob.Tracker
+---@field on_startup_error fun(|nil
 ---@field on_exit fun(code : number)|nil
 ---@field on_sess_added fun(id:number,name:string, parent_id:number,ctrl:loop.job.DebugJob.SessionController,data:loopdebug.session.DataProviders)|nil
 ---@field on_sess_removed fun(id:number, name:string)|nil
@@ -83,10 +84,12 @@ end
 ---@param args loop.DebugJob.StartArgs
 ---@return boolean, string|nil
 function DebugJob:start(args)
-    if #self._sessions > 0 then
-        return false, "A debug job is already running"
+    assert(#self._sessions == 0, "already started")
+    local ok, err = self:add_new_session(args.name, args.debug_args)
+    if not ok then
+        self._trackers:invoke("on_startup_error")
     end
-    return self:add_new_session(args.name, args.debug_args)
+    return ok, err
 end
 
 ---@param name string

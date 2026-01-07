@@ -26,7 +26,7 @@ local M                  = {}
 
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
----@field state "starting"|"running"|"stopped"|"ended"|nil
+---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
 ---@field context_keys loopdebug.mgr.InSessionCtx
@@ -440,19 +440,20 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
     if not debuggee_output_ctrl then
         local page_group = jobdata.page_manager.get_page_group(_page_groups.output)
             or jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
-
-        local page_data = page_group.get_page(tostring(sess_id))
-        if not page_data then
-            page_data = page_group.add_page({
-                id = tostring(sess_id),
-                type = "output",
-                buftype = "output",
-                label = sess_name,
-            })
-        end
-        if page_data then
-            sess_data.debuggee_output_ctrl = page_data.output_buf
-            debuggee_output_ctrl = sess_data.debuggee_output_ctrl
+        if page_group then
+            local page_data = page_group.get_page(tostring(sess_id))
+            if not page_data then
+                page_data = page_group.add_page({
+                    id = tostring(sess_id),
+                    type = "output",
+                    buftype = "output",
+                    label = sess_name,
+                })
+            end
+            if page_data then
+                sess_data.debuggee_output_ctrl = page_data.output_buf
+                debuggee_output_ctrl = sess_data.debuggee_output_ctrl
+            end
         end
     end
 
@@ -651,6 +652,7 @@ function M.track_new_debugjob(task_name, page_manager)
         label = "Debug Sessions",
         activate = true,
     })
+    assert(page_data)
 
     local sessionlist_comp = SessionList:new()
     sessionlist_comp:link_to_buffer(page_data.comp_buf)
@@ -690,16 +692,23 @@ function M.track_new_debugjob(task_name, page_manager)
             local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
             local pg = jobdata.page_manager.get_page_group(_page_groups.output)
                 or jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
-            local pd, err = pg.add_page({
-                id = "term." .. name .. vim.loop.hrtime(),
-                type = "term",
-                buftype = "term",
-                label = "Debug Server",
-                term_args =
-                    start_args,
-                activate = true
-            })
-            if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
+            if pg then
+                local pd, err = pg.add_page({
+                    ---@diagnostic disable-next-line: undefined-field
+                    id = "term." .. name .. vim.loop.hrtime(),
+                    type = "term",
+                    buftype = "term",
+                    label = "Debug Server",
+                    term_args =
+                        start_args,
+                    activate = true
+                })
+                if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
+            end
+        end,
+        on_startup_error = function ()
+            _current_job_data = nil
+            debugevents.report_debug_end(false)         
         end,
         on_exit = function(code)
             _current_job_data = nil

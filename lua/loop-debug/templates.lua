@@ -44,6 +44,9 @@ return {
             request = "launch",
             runInTerminal = true,
             stopOnEntry = false,
+            initCommands = {
+                "command script import lldb.formatters.cpp", -- For C++
+            }
         }
     },
     {
@@ -55,6 +58,43 @@ return {
             debugger = "lldb",
             request = "attach",
             pid = "${select-pid}",
+            initCommands = {
+                "command script import lldb.formatters.cpp", -- For C++
+            }
+
+        }
+    },
+    -- ==================================================================
+    -- C / C++ / Rust / Objective-C (codelldb)
+    -- ==================================================================
+    {
+        name = "Debug executable with codelldb (launch)",
+        task = {
+            __order = field_order,
+            name = "Debug",
+            type = "debug",
+            program = "${prompt:Select binary,./,file}",
+            cwd = "${wsdir}",
+            debugger = "codelldb",
+            request = "launch",
+            runInTerminal = true,
+            stopOnEntry = false,
+            -- Enable nicer C++/Rust formatting
+            sourceLanguages = { "cpp", "rust" },
+        }
+    },
+    {
+        name = "Attach to running process (codelldb)",
+        task = {
+            __order = field_order,
+            name = "Attach",
+            type = "debug",
+            debugger = "codelldb",
+            request = "attach",
+            pid = "${select-pid}",
+            -- codelldb often requires the program path even for attaching
+            -- to resolve symbols correctly
+            --program = "${prompt:Select binary,./,file}",
         }
     },
     -- ==================================================================
@@ -211,7 +251,7 @@ return {
             type = "debug",
             debugger = "netcoredbg",
             request = "launch",
-            program = ""
+            program = "${prompt:Select binary,./,file}",
         }
     },
     {

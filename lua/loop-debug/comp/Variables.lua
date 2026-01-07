@@ -36,7 +36,7 @@ local function _preview_string(str, max_len)
     end
     local preview = str:gsub("\n", "⏎")
     if #preview <= max_len then return preview, true end
-    return vim.fn.trim(preview:sub(1, max_len), "", 2) .. "…"
+    return vim.fn.trim(preview:sub(1, max_len), "", 2) .. "…", true
 end
 
 ---@param expr string

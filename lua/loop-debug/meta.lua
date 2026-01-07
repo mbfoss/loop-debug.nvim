@@ -27,3 +27,4 @@ assert(false, "should not require() meta file")
 ---@field pathMappings string|table|nil
 ---@field hostName string|nil
 ---@field env table<string,string>|nil
+---@field sourceMap table<string,string>|nil
