@@ -28,3 +28,5 @@ assert(false, "should not require() meta file")
 ---@field hostName string|nil
 ---@field env table<string,string>|nil
 ---@field sourceMap table<string,string>|nil
+---@field sourceLanguages string[]?
+---@field initCommands string[]?

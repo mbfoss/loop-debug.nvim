@@ -163,10 +163,7 @@ debuggers.lldb = {
             env = task.env,
             stopOnEntry = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
-            initCommands = {
-                "command script import lldb.formatters.cpp",
-                "settings set target.max-string-summary-length 1024"
-            }
+            initCommands = task.initCommands,
         }
     end,
     attach_args = function(context)
@@ -204,7 +201,7 @@ debuggers.codelldb = {
             -- Integrated terminal is usually best for LLDB
             runInTerminal = task.runInTerminal ~= false,
             -- Enables pretty-printing for Rust/C++
-            sourceLanguages = { "cpp", "rust" },
+            sourceLanguages = task.sourceLanguages, -- { "cpp", "rust" },
             -- This allows the debugger to find source files if paths are relative
             sourceMap = task.sourceMap,
         }
