@@ -6,11 +6,11 @@ local jsontools = require('loop.tools.json')
 ---@type loop.TaskProvider
 local task_provider =
 {
-    on_workspace_open = function(_, store)
-        persistence.on_workspace_open(store)
+    on_workspace_load = function(_, store)
+        persistence.on_workspace_load(store)
     end,
-    on_workspace_close = function(_)
-        persistence.on_workspace_close()
+    on_workspace_unload = function(_)
+        persistence.on_workspace_unload()
     end,
     on_store_will_save = function (_, store)
         persistence.on_store_will_save(store)

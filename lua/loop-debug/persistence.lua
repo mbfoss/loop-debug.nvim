@@ -11,8 +11,8 @@ local Trackers  = require("loop.tools.Trackers")
 local _current_data
 
 ---@class loopdebug.persistence.Tracker
----@field on_ws_open fun()?
----@field on_ws_closed fun()?
+---@field on_ws_load fun()?
+---@field on_ws_unload fun()?
 ---@field on_ws_will_save fun()?
 
 ---@type loop.tools.Trackers<loopdebug.persistence.Tracker>
@@ -22,23 +22,23 @@ local _trackers = Trackers:new()
 ---@return loop.TrackerRef
 function M.add_tracker(callbacks)
     local ref = _trackers:add_tracker(callbacks)
-    if _current_data and callbacks.on_ws_open then
-        callbacks.on_ws_open()
+    if _current_data and callbacks.on_ws_load then
+        callbacks.on_ws_load()
     end
     return ref
 end
 
 ---@param store loop.TaskProviderStore
-function M.on_workspace_open(store)
+function M.on_workspace_load(store)
     _current_data = {
         store = store
     }
-    _trackers:invoke("on_ws_open")
+    _trackers:invoke("on_ws_load")
 end
 
-function M.on_workspace_close()
+function M.on_workspace_unload()
     _current_data = nil
-    _trackers:invoke("on_ws_closed")
+    _trackers:invoke("on_ws_unload")
 end
 
 ---@param store loop.TaskProviderStore

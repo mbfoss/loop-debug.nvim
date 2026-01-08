@@ -203,7 +203,7 @@ function M.init()
     if _init_done then return end
     _init_done = true
     persistence.add_tracker({
-        on_ws_closed = function()
+        on_ws_unload = function()
             M.hide()
         end,
     })

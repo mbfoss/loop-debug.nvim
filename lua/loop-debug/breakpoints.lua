@@ -318,10 +318,10 @@ function M.init()
     _init_done = true
 
     persistence.add_tracker({
-        on_ws_open = function()
+        on_ws_load = function()
             _set_breakpoints(persistence.get_config("breakpoints") or {})
         end,
-        on_ws_closed = function()
+        on_ws_unload = function()
         end,
         on_ws_will_save = function()
             persistence.set_config("breakpoints", M.get_breakpoints())

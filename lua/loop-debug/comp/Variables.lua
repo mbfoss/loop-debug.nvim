@@ -168,7 +168,7 @@ function Variables:init()
 
     ---@type loop.TrackerRef?
     self._persistence_tracker_ref = persistence.add_tracker({
-        on_ws_open = function() self:_update_data(self._query_context) end
+        on_ws_load = function() self:_update_data(self._query_context) end
     })
 end
 

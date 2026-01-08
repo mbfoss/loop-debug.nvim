@@ -226,7 +226,8 @@ function M.select_breakpoint()
     ---@cast data loopdebug.SourceBreakpoint[]
     local choices = {}
     for _, bp in pairs(data) do
-        local verified = _get_breakpoint_state(data)
+        local bpdata = _breakpoints_data[bp.id]
+        local verified = bpdata and _get_breakpoint_state(bpdata) or false
         local item = {
             label = _format_breakpoint(bp, verified),
             data = bp,
