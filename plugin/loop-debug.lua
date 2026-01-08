@@ -13,4 +13,5 @@ vim.api.nvim_create_user_command("LoopDebug", function(opts)
             return require("loop-debug").complete(arg_lead, cmd_line)
         end,
         desc = "Loop.nvim management commands",
+        range = true,
     })

@@ -599,15 +599,18 @@ local function _process_select_frame_command(jobdata)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
----@return boolean, string|nil
-local function _process_inspect_var_command(jobdata)
+---@param opts vim.api.keyset.create_user_command.command_args
+local function _process_inspect_var_command(jobdata, opts)
     local sess_id = jobdata.current_session_id
     local sess_data = sess_id and jobdata.session_data[sess_id] or nil
     if not sess_data then return false, "No active debug session" end
 
     local dbgtools = require('loop-debug.tools.dbgtools')
-    local expr, expr_err = dbgtools.get_value_for_inspect()
-    if not expr then return false, expr_err or "No text under the cursor" end
+    local expr, expr_err = dbgtools.get_value_for_inspect(opts)
+    if not expr then
+        if expr_err then vim.notify(expr_err, vim.log.levels.WARN) end
+        return
+    end
 
     local frame = sess_data.cur_frame
     local ctx = _build_context(jobdata)
@@ -624,11 +627,11 @@ local function _process_inspect_var_command(jobdata)
                     title = title
                 })
             else
-                floatwin.show_floatwin(err or "not available", { title = "Error" })
+                local text = ("%s\n\n:%s"):format(expr, err or "not available")
+                floatwin.show_floatwin(text, { title = "Error" })
             end
         end
     end)
-    return true
 end
 
 -- =============================================================================
@@ -705,12 +708,12 @@ function M.track_new_debugjob(task_name, page_manager)
                 if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
             end
         end,
-         on_breakpoint_event = function (sess_id, sess_name, event)
+        on_breakpoint_event = function(sess_id, sess_name, event)
             debugevents.report_breakpoints_update(sess_id, event)
-         end,
-        on_startup_error = function ()
+        end,
+        on_startup_error = function()
             _current_job_data = nil
-            debugevents.report_debug_end(false)         
+            debugevents.report_debug_end(false)
         end,
         on_exit = function(code)
             _current_job_data = nil
@@ -720,10 +723,16 @@ function M.track_new_debugjob(task_name, page_manager)
 end
 
 ---@param command loop.job.DebugJob.Command|nil
----@param arg1 string|nil
-function M.debug_command(command, arg1)
+---@param args string[]
+---@param opts vim.api.keyset.create_user_command.command_args
+function M.debug_command(command, args, opts)
     if command == "breakpoint" then
-        if arg1 == "list" then breakpointsmonitor.select_breakpoint() else breakpoints.breakpoints_command(arg1) end
+        local bp_cmd = args[2]
+        if bp_cmd == "list" then
+            breakpointsmonitor.select_breakpoint()
+        else
+            breakpoints.breakpoints_command(bp_cmd)
+        end
         return
     end
 
@@ -752,7 +761,7 @@ function M.debug_command(command, arg1)
         _process_select_frame_command(jobdata); return
     end
     if command == "inspect" then
-        _process_inspect_var_command(jobdata); return
+        _process_inspect_var_command(jobdata, opts); return
     end
 
     local sess_id = jobdata.current_session_id

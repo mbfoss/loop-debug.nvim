@@ -205,15 +205,18 @@ end
 -- Dispatcher
 -----------------------------------------------------------
 
-function M.do_command(...)
-    local cmd = select(1, ...)
+---@param args string[]
+---@param opts vim.api.keyset.create_user_command.command_args
+function M.do_command(args, opts)
+    local cmd = args[1]
     if cmd == "ui" then
         debugui.toggle()
         return
     end
-    manager.debug_command(...)
+    manager.debug_command(cmd, args, opts)
 end
 
+---@param opts vim.api.keyset.create_user_command.command_args
 function M.dispatch(opts)
     M.init()
 
@@ -228,7 +231,7 @@ function M.dispatch(opts)
         vim.notify("LoopDebug invalid command " .. subcmd, vim.log.levels.ERROR)
         return
     end
-    local ok, err = pcall(M.do_command, unpack(args))
+    local ok, err = pcall(M.do_command, args, opts)
     if not ok then
         vim.notify(
             "LoopDebug " .. subcmd .. " failed: " .. tostring(err),
