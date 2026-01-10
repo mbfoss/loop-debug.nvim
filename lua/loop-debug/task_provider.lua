@@ -6,15 +6,6 @@ local jsontools = require('loop.tools.json')
 ---@type loop.TaskProvider
 local task_provider =
 {
-    on_workspace_load = function(_, store)
-        persistence.on_workspace_load(store)
-    end,
-    on_workspace_unload = function(_)
-        persistence.on_workspace_unload()
-    end,
-    on_store_will_save = function (_, store)
-        persistence.on_store_will_save(store)
-    end,
     on_tasks_cleanup = function ()
         ui.hide()
     end,
@@ -22,8 +13,7 @@ local task_provider =
         local schema = require('loop-debug.schema')
         return schema
     end,
-    get_config_order = nil,
-    get_task_templates = function(_)
+    get_task_templates = function()
         local templates = require('loop-debug.templates')
         return templates
     end,
